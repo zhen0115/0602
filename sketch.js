@@ -10,6 +10,8 @@ let optionPositions = [];
 let optionRadius = 40;
 let numberX, numberY;
 let numberSize = 64;
+let canAnswer = true; // 控制是否可以回答
+let answerDelay = 500; // 0.5 秒的延遲
 
 let numberPairs = [
   { number: 1, word: "one" },
@@ -41,6 +43,7 @@ function startGame() {
   generateQuestion();
   gameStarted = true;
   instructionDiv.html('將你的手移動到對應的英文單字上');
+  canAnswer = true; // 重新開始遊戲時允許回答
 }
 
 function generateQuestion() {
@@ -49,7 +52,6 @@ function generateQuestion() {
   currentNumber = pair.number;
   correctAnswer = pair.word;
 
-  // 隨機選擇錯誤的選項
   options = [correctAnswer];
   while (options.length < 3) {
     let wrongPair = random(numberPairs);
@@ -57,13 +59,11 @@ function generateQuestion() {
       options.push(wrongPair.word);
     }
   }
-  shuffle(options); // 打亂選項順序
+  shuffle(options);
 
-  // 設定數字顯示位置
   numberX = width / 4;
   numberY = height / 2;
 
-  // 設定選項顯示位置
   optionPositions = [
     { x: width * 0.6, y: height / 3 },
     { x: width * 0.8, y: height / 2 },
@@ -90,13 +90,11 @@ function draw() {
   image(video, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
   pop();
 
-  // 顯示當前數字
   fill(0);
   textSize(numberSize);
   textAlign(CENTER, CENTER);
   text(currentNumber, numberX, numberY);
 
-  // 繪製選項
   textSize(24);
   for (let i = 0; i < options.length; i++) {
     fill(0, 100, 200);
@@ -109,7 +107,6 @@ function draw() {
   if (gameStarted) {
     video.loadPixels();
     if (video.pixels.length > 0) {
-      // 簡化手部偵測來判斷是否靠近選項
       let detectionRadius = 30;
       for (let i = 0; i < options.length; i++) {
         let optionX = optionPositions[i].x;
@@ -133,17 +130,18 @@ function draw() {
           if (handDetected) break;
         }
 
-        if (handDetected) {
+        if (handDetected && canAnswer) {
           if (options[i] === correctAnswer) {
             score++;
             instructionDiv.html('答對了！分數：' + score);
-            generateQuestion();
+            canAnswer = false; // 鎖定回答
+            setTimeout(() => {
+              generateQuestion();
+              canAnswer = true; // 解鎖回答
+            }, answerDelay);
           } else {
             instructionDiv.html('再試一次！分數：' + score);
           }
-          // 為了避免連續觸發，可以加入一個小的延遲或狀態判斷
-          // gameStarted = false; // 暫停偵測
-          // setTimeout(() => { gameStarted = true; }, 500);
         }
       }
     }
@@ -157,7 +155,14 @@ function draw() {
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
-  generateQuestion(); // 重新計算選項位置
+  // 重新計算選項顯示位置和數字位置
+  optionPositions = [
+    { x: width * 0.6, y: height / 3 },
+    { x: width * 0.8, y: height / 2 },
+    { x: width * 0.6, y: height * 2 / 3 }
+  ];
+  numberX = width / 4;
+  numberY = height / 2;
 }
 
 function keyPressed() {
