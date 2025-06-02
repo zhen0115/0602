@@ -1,142 +1,209 @@
 let video;
-let handLandmarker;
-let handsLoaded = false;
-let redDot = { x: 200, y: 200, r: 30, held: false };
-let pinchThreshold = 40;
+let pg; // p5.Graphics 物件
+let currentNumber;
 let options = [];
 let correctAnswer;
-let currentNumber;
+let score = 0;
+let gameStarted = false;
+let instructionDiv;
+let optionPositions = [];
+let optionRadius = 50; // 稍微增大選項的觸碰範圍
+let numberX, numberY;
+let numberSize = 64;
+let canAnswer = true; // 控制是否可以回答
+let answerDelay = 500; // 0.5 秒的延遲
+let handPosition = null; // 追蹤手部中心位置 (簡化)
+let touchThreshold = 60; // 觸碰的距離閾值
+let brightnessThreshold = 150; // 亮度閾值
+let brightPixelThreshold = 10; // 最少亮點數
+
 let numberPairs = [
   { number: 1, word: "one" },
   { number: 2, word: "two" },
   { number: 3, word: "three" },
   { number: 4, word: "four" },
   { number: 5, word: "five" }
+  // 可以添加更多數字和單字
 ];
-let score = 0;
-let optionRadius = 60;
-let instructionDiv;
 
-async function setup() {
+function setup() {
   createCanvas(windowWidth, windowHeight);
-  instructionDiv = select('#instruction');
+  background('#ffe6a7');
+
   video = createCapture(VIDEO);
   video.size(640, 480);
   video.hide();
 
-  const vision = await window.FilesetResolver.forVisionTasks(
-    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
-  );
+  pg = createGraphics(video.width, video.height);
 
-  handLandmarker = await window.HandLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath:
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/hand_landmarker.task',
-    },
-    runningMode: 'VIDEO',
-    numHands: 2,
-  });
+  instructionDiv = createDiv('將你的食指移動到對應的英文單字上');
+  instructionDiv.id('instruction');
 
-  handsLoaded = true;
+  startGame();
+}
+
+function startGame() {
+  score = 0;
   generateQuestion();
+  gameStarted = true;
+  instructionDiv.html('將你的食指移動到對應的英文單字上');
+  canAnswer = true;
+  handPosition = null; // 重置手部位置
 }
 
 function generateQuestion() {
-  let randomPair = random(numberPairs);
-  currentNumber = randomPair.number;
-  correctAnswer = randomPair.word;
+  let randomIndex = floor(random(numberPairs.length));
+  let pair = numberPairs[randomIndex];
+  currentNumber = pair.number;
+  correctAnswer = pair.word;
+
   options = [correctAnswer];
-
   while (options.length < 3) {
-    let rand = random(numberPairs).word;
-    if (!options.includes(rand)) options.push(rand);
+    let wrongPair = random(numberPairs);
+    if (wrongPair.word !== correctAnswer && !options.includes(wrongPair.word)) {
+      options.push(wrongPair.word);
+    }
   }
-
   shuffle(options);
+
+  numberX = width / 4;
+  numberY = height / 2;
+
+  optionPositions = [
+    { x: width * 0.6, y: height / 3 },
+    { x: width * 0.8, y: height / 2 },
+    { x: width * 0.6, y: height * 2 / 3 }
+  ];
 }
 
 function draw() {
   background('#ffe6a7');
-  image(video, 0, 0, width, height);
 
-  if (!handsLoaded) return;
+  let videoWidth = video.width;
+  let videoHeight = video.height;
+  let displayWidth = windowWidth * 0.8;
+  let displayHeight = windowHeight * 0.8;
+  let scaleFactor = min(displayWidth / videoWidth, displayHeight / videoHeight);
+  let scaledWidth = videoWidth * scaleFactor;
+  let scaledHeight = videoHeight * scaleFactor;
+  let x = (windowWidth - scaledWidth) / 2;
+  let y = (windowHeight - scaledHeight) / 2;
 
-  handLandmarker.detectForVideo(video.elt, performance.now()).then((results) => {
-    if (!results || results.landmarks.length === 0) {
-      redDot.held = false;
-      return;
-    }
+  push();
+  translate(x + scaledWidth / 2, y + scaledHeight / 2);
+  scale(-1, 1);
+  image(video, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+  pop();
 
-    let hand = results.landmarks[0];
-    let indexTip = hand[8];
-    let thumbTip = hand[4];
+  fill(0);
+  textSize(numberSize);
+  textAlign(CENTER, CENTER);
+  text(currentNumber, numberX, numberY);
 
-    let ix = indexTip.x * width;
-    let iy = indexTip.y * height;
-    let tx = thumbTip.x * width;
-    let ty = thumbTip.y * height;
+  textSize(24);
+  for (let i = 0; i < options.length; i++) {
+    fill(0, 100, 200);
+    ellipse(optionPositions[i].x, optionPositions[i].y, optionRadius * 2);
+    fill(255);
+    textAlign(CENTER, CENTER);
+    text(options[i], optionPositions[i].x, optionPositions[i].y);
+  }
 
-    let d = dist(ix, iy, tx, ty);
-    if (d < pinchThreshold) {
-      redDot.held = true;
-      redDot.x = (ix + tx) / 2;
-      redDot.y = (iy + ty) / 2;
-    } else {
-      redDot.held = false;
-    }
+  if (gameStarted) {
+    video.loadPixels();
+    if (video.pixels.length > 0) {
+      // 簡化手部中心估計 (尋找畫面中心附近的亮點)
+      let avgX = 0;
+      let avgY = 0;
+      let brightPixels = 0;
+      let searchRadius = 50; // 在畫面中心附近搜尋
 
-    fill(255, 0, 0, 180);
-    noStroke();
-    ellipse(redDot.x, redDot.y, redDot.r * 2);
-
-    // 檢查是否進入選項
-    for (let i = 0; i < options.length; i++) {
-      let opt = optionPosition(i);
-      fill(0, 100, 200);
-      ellipse(opt.x, opt.y, optionRadius * 2);
-      fill(255);
-      textAlign(CENTER, CENTER);
-      textSize(20);
-      text(options[i], opt.x, opt.y);
-
-      if (
-        redDot.held &&
-        dist(redDot.x, redDot.y, opt.x, opt.y) < optionRadius
-      ) {
-        if (options[i] === correctAnswer) {
-          score++;
-          instructionDiv.html(`答對了！目前分數：${score}`);
-          generateQuestion();
-        } else {
-          instructionDiv.html(`錯了，再試一次！目前分數：${score}`);
+      for (let i = -searchRadius; i < searchRadius; i += 5) {
+        for (let j = -searchRadius; j < searchRadius; j += 5) {
+          let checkX = floor(video.width / 2 + i);
+          let checkY = floor(video.height / 2 + j);
+          if (checkX >= 0 && checkX < video.width && checkY >= 0 && checkY < video.height) {
+            let index = (checkY * video.width + checkX) * 4;
+            let brightness = (video.pixels[index] + video.pixels[index + 1] + video.pixels[index + 2]) / 3;
+            if (brightness > brightnessThreshold) { // 判斷為亮點 (可能的手指)
+              avgX += checkX;
+              avgY += checkY;
+              brightPixels++;
+            }
+          }
         }
-        redDot.held = false;
-        break;
+      }
+
+      if (brightPixels > brightPixelThreshold) { // 至少要有一定數量的亮點才認為偵測到手
+        handPosition = {
+          x: map(avgX / brightPixels, 0, video.width, x, x + scaledWidth),
+          y: map(avgY / brightPixels, 0, video.height, y, y + scaledHeight)
+        };
+
+        // 繪製一個小圓圈表示偵測到的手部位置
+        fill(255, 0, 0, 150);
+        ellipse(handPosition.x, handPosition.y, 20);
+
+        console.log("手部位置:", handPosition);
+
+        // 檢查手部位置是否靠近選項
+        if (handPosition && canAnswer) {
+          for (let i = 0; i < options.length; i++) {
+            let distance = dist(handPosition.x, handPosition.y, optionPositions[i].x, optionPositions[i].y);
+            console.log(`與選項 ${i} ('${options[i]}') 的距離:`, distance);
+            if (distance < touchThreshold) {
+              console.log(`觸碰到選項 ${i} ('${options[i]}')`);
+              if (options[i] === correctAnswer) {
+                score++;
+                instructionDiv.html('答對了！分數：' + score);
+                canAnswer = false;
+                setTimeout(() => {
+                  generateQuestion();
+                  canAnswer = true;
+                  handPosition = null; // 重置手部位置
+                }, answerDelay);
+              } else {
+                instructionDiv.html('再試一次！分數：' + score);
+              }
+              break; // 避免同時觸發多個選項
+            }
+          }
+        }
+      } else {
+        handPosition = null; // 沒有偵測到明顯的手部
       }
     }
 
-    // 顯示題目數字
     fill(0);
-    textSize(64);
-    textAlign(LEFT, CENTER);
-    text(currentNumber, 40, height / 2);
-  });
-
-  // 分數顯示
-  fill(0);
-  textSize(20);
-  textAlign(LEFT, TOP);
-  text('分數: ' + score, 20, 20);
-}
-
-function optionPosition(i) {
-  let spacing = height / (options.length + 1);
-  return {
-    x: width - 150,
-    y: spacing * (i + 1),
-  };
+    textSize(20);
+    textAlign(LEFT, TOP);
+    text('分數: ' + score, 20, 20);
+  }
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
+  optionPositions = [
+    { x: width * 0.6, y: height / 3 },
+    { x: width * 0.8, y: height / 2 },
+    { x: width * 0.6, y: height * 2 / 3 }
+  ];
+  numberX = width / 4;
+  numberY = height / 2;
+}
+
+function keyPressed() {
+  if (key === 'r' || key === 'R') {
+    startGame();
+  }
+  if (key === 's' || key === 'S') {
+    saveCanvas('math_pairing_game', 'png');
+  }
+}
+
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
 }
