@@ -12,10 +12,15 @@ let numberX, numberY;
 let numberSize = 64;
 let canAnswer = true; // 控制是否可以回答
 let answerDelay = 500; // 0.5 秒的延遲
-let handPosition = null; // 追蹤手部中心位置
+let handPosition = null; // 追蹤手部中心位置 (使用 Handtrack)
 let touchThreshold = optionRadius; // 紅點中心進入選項圓心範圍即判斷觸碰
-let brightnessThreshold = 130; // 稍微降低亮度閾值
-let brightPixelThreshold = 5; // 稍微降低最小亮點數
+let model = null;
+const modelParams = {
+  flipHorizontal: true,   // 鏡像水平方向
+  maxNumBoxes: 1,        // 最多偵測一個手
+  iouThreshold: 0.5,      // 交並比閾值
+  scoreThreshold: 0.75,   // 分數閾值
+};
 
 let numberPairs = [
   { number: 1, word: "one" },
@@ -39,7 +44,12 @@ function setup() {
   instructionDiv = createDiv('移動紅點到對應的英文單字上');
   instructionDiv.id('instruction');
 
-  startGame();
+  // 加載 Handtrack.js 模型
+  handtrack.load(modelParams).then(lmodel => {
+    model = lmodel;
+    console.log("Handtrack 模型加載完成");
+    startGame(); // 模型加載完成後再開始遊戲
+  });
 }
 
 function startGame() {
@@ -109,37 +119,15 @@ function draw() {
     text(options[i], optionPositions[i].x, optionPositions[i].y);
   }
 
-  if (gameStarted) {
-    video.loadPixels();
-    if (video.pixels.length > 0) {
-      // 簡化手部中心估計 (尋找畫面中心附近的亮點) - 更穩定地追蹤
-      let avgX = 0;
-      let avgY = 0;
-      let brightPixels = 0;
-      let searchRadius = 60; // 稍微擴大搜尋範圍
-      let totalBrightnessX = 0;
-      let totalBrightnessY = 0;
-
-      for (let i = -searchRadius; i < searchRadius; i += 5) {
-        for (let j = -searchRadius; j < searchRadius; j += 5) {
-          let checkX = floor(video.width / 2 + i);
-          let checkY = floor(video.height / 2 + j);
-          if (checkX >= 0 && checkX < video.width && checkY >= 0 && checkY < video.height) {
-            let index = (checkY * video.width + checkX) * 4;
-            let brightness = (video.pixels[index] + video.pixels[index + 1] + video.pixels[index + 2]) / 3;
-            if (brightness > brightnessThreshold) {
-              totalBrightnessX += checkX * brightness;
-              totalBrightnessY += checkY * brightness;
-              brightPixels++;
-            }
-          }
-        }
-      }
-
-      if (brightPixels > brightPixelThreshold) {
+  if (gameStarted && model) {
+    model.detect(video).then(predictions => {
+      if (predictions.length > 0) {
+        // 我們只取第一個偵測到的手
+        const hand = predictions[0].bbox; // [x, y, width, height]
+        // 計算手部中心位置並映射到畫布
         handPosition = {
-          x: map(totalBrightnessX / (brightPixels * 255), 0, video.width, x, x + scaledWidth), // 使用加權平均
-          y: map(totalBrightnessY / (brightPixels * 255), 0, video.height, y, y + scaledHeight)
+          x: map(hand[0] + hand[2] / 2, 0, videoWidth, x, x + scaledWidth),
+          y: map(hand[1] + hand[3] / 2, 0, videoHeight, y, y + scaledHeight)
         };
 
         // 繪製紅點表示手部位置
@@ -170,13 +158,13 @@ function draw() {
       } else {
         handPosition = null;
       }
-    }
-
-    fill(0);
-    textSize(20);
-    textAlign(LEFT, TOP);
-    text('分數: ' + score, 20, 20);
+    });
   }
+
+  fill(0);
+  textSize(20);
+  textAlign(LEFT, TOP);
+  text('分數: ' + score, 20, 20);
 }
 
 function windowResized() {
