@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>手控數學配對遊戲</title>
   <style>
-    body { margin: 0; }
+    body { margin: 0; overflow: hidden; }
     canvas { display: block; }
     #instruction {
       position: absolute;
@@ -17,9 +17,18 @@
       font-size: 16px;
     }
   </style>
+  <!-- p5.js -->
   <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.js"></script>
+  <!-- TensorFlow.js and MediaPipe Hands -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+  <!-- Game logic -->
   <script src="sketch.js"></script>
 </head>
 <body>
+  <div id="instruction">用兩根手指「握住」紅點，拖到正確的單字區域</div>
 </body>
 </html>
