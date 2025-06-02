@@ -6,25 +6,31 @@ let fingerIndexX, fingerIndexY;
 let circleX, circleY;
 let circleRadius = 50;
 let isDragging = false;
+let scaledWidth; // 宣告 scaledWidth
+let scaledHeight; // 宣告 scaledHeight
+let x; // 宣告 x
+let y; // 宣告 y
+let scaleFactor; // 宣告 scaleFactor
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
   background('#ffe6a7');
 
-  video = createCapture(VIDEO);
+  video = createCapture(VIDEO, () => { // 在 createCapture 的回呼函式中初始化 handpose
+    handpose = ml5.handpose(video, modelReady);
+
+    // 當模型識別到手部時，將結果儲存在 'predictions' 陣列中
+    handpose.on('predict', results => {
+      predictions = results;
+    });
+  }, (err) => {
+    console.log("Camera permission denied:", err);
+  });
   video.size(640, 480); // 設定視訊尺寸 (可依您的攝影機調整)
   video.hide(); // 隱藏攝影機的 HTML 元素
 
   // 創建一個與視訊尺寸相同的 p5.Graphics 物件
   pg = createGraphics(video.width, video.height);
-
-  // 初始化 Handpose 模型
-  handpose = ml5.handpose(video, modelReady);
-
-  // 當模型識別到手部時，將結果儲存在 'predictions' 陣列中
-  handpose.on('predict', results => {
-    predictions = results;
-  });
 
   // 初始化圓形的位置
   circleX = pg.width / 2;
@@ -44,15 +50,15 @@ function draw() {
   let displayHeight = windowHeight * 0.8;
 
   // 計算保持原始比例的縮放比例
-  let scaleFactor = min(displayWidth / videoWidth, displayHeight / videoHeight);
+  scaleFactor = min(displayWidth / videoWidth, displayHeight / videoHeight);
 
   // 計算縮放後的影像尺寸
-  let scaledWidth = videoWidth * scaleFactor;
-  let scaledHeight = videoHeight * scaleFactor;
+  scaledWidth = videoWidth * scaleFactor;
+  scaledHeight = videoHeight * scaleFactor;
 
   // 計算影像在視窗中央的 x 和 y 座標
-  let x = (windowWidth - scaledWidth) / 2;
-  let y = (windowHeight - scaledHeight) / 2;
+  x = (windowWidth - scaledWidth) / 2;
+  y = (windowHeight - scaledHeight) / 2;
 
   push(); // 保存當前的繪圖狀態
   translate(x + scaledWidth / 2, y + scaledHeight / 2); // 移動到影像的中心
@@ -108,8 +114,12 @@ function keyPressed() {
 
 // 檢查滑鼠是否在圓形上
 function mousePressed() {
-  if (dist(mouseX, mouseY, (windowWidth - (windowWidth - scaledWidth) / 2) - (scaledWidth / 2 - circleX * scaleFactor), (windowHeight - (windowHeight - scaledHeight) / 2) - (scaledHeight / 2 - circleY * scaleFactor)) < circleRadius * scaleFactor) {
-    isDragging = true;
+  if (scaledWidth && scaledHeight && x && y && scaleFactor) { // 確保這些變數已定義
+    let circleCanvasX = x + scaledWidth / 2 + (circleX - pg.width / 2) * scaleFactor;
+    let circleCanvasY = y + scaledHeight / 2 + (circleY - pg.height / 2) * scaleFactor;
+    if (dist(mouseX, mouseY, circleCanvasX, circleCanvasY) < circleRadius * scaleFactor) {
+      isDragging = true;
+    }
   }
 }
 
