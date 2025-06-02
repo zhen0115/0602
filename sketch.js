@@ -1,5 +1,11 @@
 let video;
 let pg; // p5.Graphics 物件
+let handpose;
+let predictions = [];
+let fingerIndexX, fingerIndexY;
+let circleX, circleY;
+let circleRadius = 50;
+let isDragging = false;
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -11,6 +17,22 @@ function setup() {
 
   // 創建一個與視訊尺寸相同的 p5.Graphics 物件
   pg = createGraphics(video.width, video.height);
+
+  // 初始化 Handpose 模型
+  handpose = ml5.handpose(video, modelReady);
+
+  // 當模型識別到手部時，將結果儲存在 'predictions' 陣列中
+  handpose.on('predict', results => {
+    predictions = results;
+  });
+
+  // 初始化圓形的位置
+  circleX = pg.width / 2;
+  circleY = pg.height / 2;
+}
+
+function modelReady() {
+  console.log("Handpose model ready!");
 }
 
 function draw() {
@@ -38,10 +60,32 @@ function draw() {
   image(video, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight); // 繪製翻轉後的影像
   pop(); // 恢復之前的繪圖狀態
 
-  // 在 p5.Graphics 物件上繪製一些內容 (例如：一個紅色的圓)
+  // 在 p5.Graphics 物件上繪製內容
   pg.background(0, 0, 0, 0); // 清空之前的繪圖 (透明背景)
+
+  // 檢查是否有偵測到手部
+  if (predictions.length > 0) {
+    const hand = predictions[0]; // 假設只追蹤一隻手
+    const indexFinger = hand.landmarks[8]; // 食指的關鍵點索引是 8
+
+    // 將食指的座標轉換到 p5.Graphics 的座標系統中
+    fingerIndexX = map(indexFinger[0], 0, videoWidth, 0, pg.width);
+    fingerIndexY = map(indexFinger[1], 0, videoHeight, 0, pg.height);
+
+    // 如果正在拖曳，則更新圓形的位置
+    if (isDragging) {
+      circleX = fingerIndexX;
+      circleY = fingerIndexY;
+    }
+  }
+
+  // 動態變化：讓圓形 пульсировать (pulsate)
+  let pulseSpeed = 0.05;
+  let pulseAmount = 5;
+  let dynamicRadius = circleRadius + sin(frameCount * pulseSpeed) * pulseAmount;
+
   pg.fill(255, 0, 0);
-  pg.ellipse(pg.width / 2, pg.height / 2, 50, 50);
+  pg.ellipse(circleX, circleY, dynamicRadius * 2, dynamicRadius * 2);
 
   // 將 p5.Graphics 物件繪製到畫布上，位置與視訊相同
   push();
@@ -58,6 +102,17 @@ function windowResized() {
 function keyPressed() {
   // 當按下 's' 鍵時儲存畫布
   if (key === 's' || key === 'S') {
-    saveCanvas('flipped_camera_with_circle', 'png');
+    saveCanvas('flipped_camera_with_interactive_circle', 'png');
   }
+}
+
+// 檢查滑鼠是否在圓形上
+function mousePressed() {
+  if (dist(mouseX, mouseY, (windowWidth - (windowWidth - scaledWidth) / 2) - (scaledWidth / 2 - circleX * scaleFactor), (windowHeight - (windowHeight - scaledHeight) / 2) - (scaledHeight / 2 - circleY * scaleFactor)) < circleRadius * scaleFactor) {
+    isDragging = true;
+  }
+}
+
+function mouseReleased() {
+  isDragging = false;
 }
