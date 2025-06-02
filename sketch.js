@@ -1,195 +1,63 @@
-// sketch.js
-
-let video; // 將 capture 更名為 video 以符合用戶提供的程式碼
-let facemesh;
-let predictions = [];
-
-// 臉部主要輪廓點的索引
-const faceOutlineIndices = [
-  409, 270, 269, 67, 0, 37, 39, 40, 185, 61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291
-];
-
-// 第二組要連接的點的索引 (用戶提供的 indices2)
-const secondLineIndices = [
-  76, 77, 90, 180, 85, 16, 315, 404, 320, 307, 306, 408, 304, 303, 302, 11, 72, 73, 74, 184
-];
-
-// 左眼外框點的索引
-const leftEyeOuterIndices = [
-  243, 190, 56, 28, 27, 29, 30, 247, 130, 25, 110, 24, 23, 22, 26, 112
-];
-
-// 左眼內框點的索引
-const leftEyeInnerIndices = [
-  133, 173, 157, 158, 159, 160, 161, 246, 33, 7, 163, 144, 145, 153, 154, 155
-];
-
-// 右眼外框點的索引
-const rightEyeOuterIndices = [
-  359, 467, 260, 259, 257, 258, 286, 414, 463, 341, 256, 252, 253, 254, 339, 255
-];
-
-// 右眼內框點的索引
-const rightEyeInnerIndices = [
-  263, 466, 388, 387, 386, 385, 384, 398, 362, 382, 381, 380, 374, 373, 390, 249
-];
-
+let video;
+let pg; // p5.Graphics 物件
 
 function setup() {
-  // 創建畫布並置中
-  createCanvas(640, 480).position(
-    (windowWidth - 640) / 2,
-    (windowHeight - 480) / 2
-  );
+  createCanvas(windowWidth, windowHeight);
+  background('#ffe6a7');
 
-  video = createCapture(VIDEO); // 獲取攝影機影像
-  video.size(width, height); // 設定影像尺寸與畫布相同
-  video.hide(); // 隱藏原始影像元素
+  video = createCapture(VIDEO);
+  video.size(640, 480); // 設定視訊尺寸 (可依您的攝影機調整)
+  video.hide(); // 隱藏攝影機的 HTML 元素
 
-  // 初始化 facemesh 模型
-  facemesh = ml5.facemesh(video, modelReady);
-  // 當模型預測結果時，更新 predictions 陣列
-  facemesh.on('predict', results => {
-    predictions = results;
-  });
-}
-
-function modelReady() {
-  // 模型載入完成時在控制台顯示訊息
-  console.log('Facemesh 模型載入完成！');
+  // 創建一個與視訊尺寸相同的 p5.Graphics 物件
+  pg = createGraphics(video.width, video.height);
 }
 
 function draw() {
-  // 在畫布上顯示攝影機影像
-  image(video, 0, 0, width, height);
+  background('#ffe6a7'); // 確保每一幀都重新繪製背景
 
-  // 只有當有預測結果時才繪製
-  if (predictions.length > 0) {
-    const keypoints = predictions[0].scaledMesh; // 獲取臉部網格點
+  let videoWidth = video.width;
+  let videoHeight = video.height;
+  let displayWidth = windowWidth * 0.8;
+  let displayHeight = windowHeight * 0.8;
 
-    // 繪製第一組紅色線條
-    drawFacemeshLines(keypoints);
+  // 計算保持原始比例的縮放比例
+  let scaleFactor = min(displayWidth / videoWidth, displayHeight / videoHeight);
 
-    // 繪製第二組黃色線條並填充
-    drawSecondGroupLines(keypoints);
+  // 計算縮放後的影像尺寸
+  let scaledWidth = videoWidth * scaleFactor;
+  let scaledHeight = videoHeight * scaleFactor;
 
-    // 在第一組與第二組之間填充綠色
-    drawGreenBetweenGroups(keypoints);
+  // 計算影像在視窗中央的 x 和 y 座標
+  let x = (windowWidth - scaledWidth) / 2;
+  let y = (windowHeight - scaledHeight) / 2;
 
-    // 繪製左眼
-    drawLeftEye(keypoints);
+  push(); // 保存當前的繪圖狀態
+  translate(x + scaledWidth / 2, y + scaledHeight / 2); // 移動到影像的中心
+  scale(-1, 1); // 水平翻轉
+  image(video, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight); // 繪製翻轉後的影像
+  pop(); // 恢復之前的繪圖狀態
 
-    // 繪製右眼
-    drawRightEye(keypoints);
-  }
+  // 在 p5.Graphics 物件上繪製一些內容 (例如：一個紅色的圓)
+  pg.background(0, 0, 0, 0); // 清空之前的繪圖 (透明背景)
+  pg.fill(255, 0, 0);
+  pg.ellipse(pg.width / 2, pg.height / 2, 50, 50);
+
+  // 將 p5.Graphics 物件繪製到畫布上，位置與視訊相同
+  push();
+  translate(x + scaledWidth / 2, y + scaledHeight / 2);
+  scale(-1, 1); // 確保 graphics 也做相同的翻轉
+  image(pg, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+  pop();
 }
 
-// 繪製第一組紅色線條
-function drawFacemeshLines(keypoints) {
-  stroke(255, 0, 0); // 設定線條顏色為紅色
-  strokeWeight(2); // 設定線條粗細
-  noFill(); // 不填充顏色
-  beginShape(); // 開始繪製形狀
-  for (let i = 0; i < faceOutlineIndices.length; i++) {
-    const idx = faceOutlineIndices[i];
-    const [x, y] = keypoints[idx];
-    vertex(x, y); // 添加頂點
-  }
-  endShape(); // 結束繪製形狀
-}
-
-// 繪製第二組黃色線條並填充
-function drawSecondGroupLines(keypoints) {
-  stroke(255, 50, 10); // 設定線條顏色為橙紅色 (用戶提供的顏色)
-  strokeWeight(6); // 設定線條粗細
-  fill(255, 255, 0, 50); // 設定填充顏色為半透明黃色
-  beginShape(); // 開始繪製形狀
-  for (let i = 0; i < secondLineIndices.length; i++) {
-    const idx = secondLineIndices[i];
-    const [x, y] = keypoints[idx];
-    vertex(x, y); // 添加頂點
-  }
-  endShape(CLOSE); // 結束繪製形狀並閉合以填充
-}
-
-// 在第一組與第二組之間填充綠色 (此為近似填充)
-function drawGreenBetweenGroups(keypoints) {
-  fill(0, 255, 0, 50); // 設定填充顏色為半透明綠色
-  noStroke(); // 不繪製線條
-  beginShape(); // 開始繪製形狀
-  // 添加第一組的點
-  for (let i = 0; i < faceOutlineIndices.length; i++) {
-    const idx = faceOutlineIndices[i];
-    const [x, y] = keypoints[idx];
-    vertex(x, y);
-  }
-  // 添加第二組的點 (反向遍歷以避免交錯，嘗試連接兩個多邊形)
-  for (let i = secondLineIndices.length - 1; i >= 0; i--) {
-    const idx = secondLineIndices[i];
-    const [x, y] = keypoints[idx];
-    vertex(x, y);
-  }
-  endShape(CLOSE); // 結束繪製形狀並閉合以填充
-}
-
-// 繪製左眼
-function drawLeftEye(keypoints) {
-  // 繪製左眼外框
-  stroke(0, 100, 255); // 深藍色線條
-  strokeWeight(2);
-  noFill();
-  beginShape();
-  for (let i = 0; i < leftEyeOuterIndices.length; i++) {
-    const idx = leftEyeOuterIndices[i];
-    const [x, y] = keypoints[idx];
-    vertex(x, y);
-  }
-  endShape(CLOSE); // 閉合形狀
-
-  // 繪製左眼內框並填充
-  stroke(0, 150, 255); // 較淺的藍色線條
-  strokeWeight(1);
-  fill(0, 150, 255, 70); // 半透明淺藍色填充
-  beginShape();
-  for (let i = 0; i < leftEyeInnerIndices.length; i++) {
-    const idx = leftEyeInnerIndices[i];
-    const [x, y] = keypoints[idx];
-    vertex(x, y);
-  }
-  endShape(CLOSE); // 閉合形狀並填充
-}
-
-// 繪製右眼
-function drawRightEye(keypoints) {
-  // 繪製右眼外框
-  stroke(150, 0, 255); // 深紫色線條
-  strokeWeight(2);
-  noFill();
-  beginShape();
-  for (let i = 0; i < rightEyeOuterIndices.length; i++) {
-    const idx = rightEyeOuterIndices[i];
-    const [x, y] = keypoints[idx];
-    vertex(x, y);
-  }
-  endShape(CLOSE); // 閉合形狀
-
-  // 繪製右眼內框並填充
-  stroke(200, 0, 255); // 較淺的紫色線條
-  strokeWeight(1);
-  fill(200, 0, 255, 70); // 半透明淺紫色填充
-  beginShape();
-  for (let i = 0; i < rightEyeInnerIndices.length; i++) {
-    const idx = rightEyeInnerIndices[i];
-    const [x, y] = keypoints[idx];
-    vertex(x, y);
-  }
-  endShape(CLOSE); // 閉合形狀並填充
-}
-
-// 當視窗大小改變時，重新調整畫布位置
 function windowResized() {
-  select('canvas').position(
-    (windowWidth - width) / 2,
-    (windowHeight - height) / 2
-  );
+  resizeCanvas(windowWidth, windowHeight);
+}
+
+function keyPressed() {
+  // 當按下 's' 鍵時儲存畫布
+  if (key === 's' || key === 'S') {
+    saveCanvas('flipped_camera_with_circle', 'png');
+  }
 }
