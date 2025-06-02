@@ -14,6 +14,8 @@ let canAnswer = true; // 控制是否可以回答
 let answerDelay = 500; // 0.5 秒的延遲
 let handPosition = null; // 追蹤手部中心位置 (簡化)
 let touchThreshold = 60; // 觸碰的距離閾值
+let brightnessThreshold = 150; // 亮度閾值
+let brightPixelThreshold = 10; // 最少亮點數
 
 let numberPairs = [
   { number: 1, word: "one" },
@@ -123,7 +125,7 @@ function draw() {
           if (checkX >= 0 && checkX < video.width && checkY >= 0 && checkY < video.height) {
             let index = (checkY * video.width + checkX) * 4;
             let brightness = (video.pixels[index] + video.pixels[index + 1] + video.pixels[index + 2]) / 3;
-            if (brightness > 150) { // 判斷為亮點 (可能的手指)
+            if (brightness > brightnessThreshold) { // 判斷為亮點 (可能的手指)
               avgX += checkX;
               avgY += checkY;
               brightPixels++;
@@ -132,7 +134,7 @@ function draw() {
         }
       }
 
-      if (brightPixels > 10) { // 至少要有一定數量的亮點才認為偵測到手
+      if (brightPixels > brightPixelThreshold) { // 至少要有一定數量的亮點才認為偵測到手
         handPosition = {
           x: map(avgX / brightPixels, 0, video.width, x, x + scaledWidth),
           y: map(avgY / brightPixels, 0, video.height, y, y + scaledHeight)
@@ -142,11 +144,15 @@ function draw() {
         fill(255, 0, 0, 150);
         ellipse(handPosition.x, handPosition.y, 20);
 
+        console.log("手部位置:", handPosition);
+
         // 檢查手部位置是否靠近選項
         if (handPosition && canAnswer) {
           for (let i = 0; i < options.length; i++) {
             let distance = dist(handPosition.x, handPosition.y, optionPositions[i].x, optionPositions[i].y);
+            console.log(`與選項 ${i} ('${options[i]}') 的距離:`, distance);
             if (distance < touchThreshold) {
+              console.log(`觸碰到選項 ${i} ('${options[i]}')`);
               if (options[i] === correctAnswer) {
                 score++;
                 instructionDiv.html('答對了！分數：' + score);
