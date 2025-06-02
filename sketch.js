@@ -1,5 +1,5 @@
 let video;
-let pg; // p5.Graphics 物件
+let pg;
 let currentNumber;
 let options = [];
 let correctAnswer;
@@ -7,15 +7,15 @@ let score = 0;
 let gameStarted = false;
 let instructionDiv;
 let optionPositions = [];
-let optionRadius = 50; // 稍微增大選項的觸碰範圍
+let optionRadius = 70; // 原本50，現在選項視覺與碰撞區更大
 let numberX, numberY;
 let numberSize = 64;
-let canAnswer = true; // 控制是否可以回答
-let answerDelay = 500; // 0.5 秒的延遲
-let handPosition = null; // 追蹤手部中心位置 (簡化)
-let touchThreshold = 60; // 觸碰的距離閾值
-let brightnessThreshold = 150; // 亮度閾值
-let brightPixelThreshold = 10; // 最少亮點數
+let canAnswer = true;
+let answerDelay = 500;
+let handPosition = null;
+let touchThreshold = 100; // 原本60，手接近就能觸發
+let brightnessThreshold = 130; // 降低亮度門檻，讓偵測更靈敏
+let brightPixelThreshold = 5;  // 減少亮點數門檻
 
 let numberPairs = [
   { number: 1, word: "one" },
@@ -23,7 +23,6 @@ let numberPairs = [
   { number: 3, word: "three" },
   { number: 4, word: "four" },
   { number: 5, word: "five" }
-  // 可以添加更多數字和單字
 ];
 
 function setup() {
@@ -48,7 +47,7 @@ function startGame() {
   gameStarted = true;
   instructionDiv.html('將你的食指移動到對應的英文單字上');
   canAnswer = true;
-  handPosition = null; // 重置手部位置
+  handPosition = null;
 }
 
 function generateQuestion() {
@@ -102,8 +101,11 @@ function draw() {
 
   textSize(24);
   for (let i = 0; i < options.length; i++) {
+    stroke(50);
+    strokeWeight(4);
     fill(0, 100, 200);
     ellipse(optionPositions[i].x, optionPositions[i].y, optionRadius * 2);
+    noStroke();
     fill(255);
     textAlign(CENTER, CENTER);
     text(options[i], optionPositions[i].x, optionPositions[i].y);
@@ -112,11 +114,10 @@ function draw() {
   if (gameStarted) {
     video.loadPixels();
     if (video.pixels.length > 0) {
-      // 簡化手部中心估計 (尋找畫面中心附近的亮點)
       let avgX = 0;
       let avgY = 0;
       let brightPixels = 0;
-      let searchRadius = 50; // 在畫面中心附近搜尋
+      let searchRadius = 50;
 
       for (let i = -searchRadius; i < searchRadius; i += 5) {
         for (let j = -searchRadius; j < searchRadius; j += 5) {
@@ -125,7 +126,7 @@ function draw() {
           if (checkX >= 0 && checkX < video.width && checkY >= 0 && checkY < video.height) {
             let index = (checkY * video.width + checkX) * 4;
             let brightness = (video.pixels[index] + video.pixels[index + 1] + video.pixels[index + 2]) / 3;
-            if (brightness > brightnessThreshold) { // 判斷為亮點 (可能的手指)
+            if (brightness > brightnessThreshold) {
               avgX += checkX;
               avgY += checkY;
               brightPixels++;
@@ -134,43 +135,36 @@ function draw() {
         }
       }
 
-      if (brightPixels > brightPixelThreshold) { // 至少要有一定數量的亮點才認為偵測到手
+      if (brightPixels > brightPixelThreshold) {
         handPosition = {
           x: map(avgX / brightPixels, 0, video.width, x, x + scaledWidth),
           y: map(avgY / brightPixels, 0, video.height, y, y + scaledHeight)
         };
 
-        // 繪製一個小圓圈表示偵測到的手部位置
         fill(255, 0, 0, 150);
-        ellipse(handPosition.x, handPosition.y, 20);
+        noStroke();
+        ellipse(handPosition.x, handPosition.y, 30); // 更明顯的手部提示圈
 
-        console.log("手部位置:", handPosition);
-
-        // 檢查手部位置是否靠近選項
-        if (handPosition && canAnswer) {
-          for (let i = 0; i < options.length; i++) {
-            let distance = dist(handPosition.x, handPosition.y, optionPositions[i].x, optionPositions[i].y);
-            console.log(`與選項 ${i} ('${options[i]}') 的距離:`, distance);
-            if (distance < touchThreshold) {
-              console.log(`觸碰到選項 ${i} ('${options[i]}')`);
-              if (options[i] === correctAnswer) {
-                score++;
-                instructionDiv.html('答對了！分數：' + score);
-                canAnswer = false;
-                setTimeout(() => {
-                  generateQuestion();
-                  canAnswer = true;
-                  handPosition = null; // 重置手部位置
-                }, answerDelay);
-              } else {
-                instructionDiv.html('再試一次！分數：' + score);
-              }
-              break; // 避免同時觸發多個選項
+        for (let i = 0; i < options.length; i++) {
+          let distance = dist(handPosition.x, handPosition.y, optionPositions[i].x, optionPositions[i].y);
+          if (distance < touchThreshold && canAnswer) {
+            if (options[i] === correctAnswer) {
+              score++;
+              instructionDiv.html('答對了！分數：' + score);
+              canAnswer = false;
+              setTimeout(() => {
+                generateQuestion();
+                canAnswer = true;
+                handPosition = null;
+              }, answerDelay);
+            } else {
+              instructionDiv.html('再試一次！分數：' + score);
             }
+            break;
           }
         }
       } else {
-        handPosition = null; // 沒有偵測到明顯的手部
+        handPosition = null;
       }
     }
 
