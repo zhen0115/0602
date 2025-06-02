@@ -1,28 +1,25 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>雙指捏紅點的數學配對遊戲</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>手控數學配對遊戲</title>
   <style>
-    body { margin: 0; overflow: hidden; }
+    body { margin: 0; }
     canvas { display: block; }
     #instruction {
       position: absolute;
       top: 10px;
       left: 10px;
-      background-color: rgba(255, 255, 255, 0.85);
+      background-color: rgba(255, 255, 255, 0.8);
       padding: 10px;
-      border-radius: 8px;
+      border-radius: 5px;
       font-size: 16px;
-      z-index: 10;
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.js" crossorigin="anonymous"></script>
-  <script src="sketch.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.js"></script>
+  <script src="sketch.js"></script>
 </head>
 <body>
-  <div id="instruction">請用兩指捏住紅點，拖進正確英文單字圓圈中</div>
 </body>
 </html>
