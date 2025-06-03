@@ -1,25 +1,39 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.4.0/lib/p5.js"></script>
+  <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>手控數學配對遊戲</title>
+  <title>數字英文配對遊戲 (手部骨架)</title>
   <style>
-    body { margin: 0; }
-    canvas { display: block; }
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 10vh; /* 減少高度，讓手機或較小的螢幕也能顯示 */
+      background-color: #ffe6a7;
+      font-family: Arial, sans-serif;
+    }
     #instruction {
       position: absolute;
-      top: 10px;
-      left: 10px;
-      background-color: rgba(255, 255, 255, 0.8);
-      padding: 10px;
-      border-radius: 5px;
-      font-size: 16px;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 24px;
+      color: #333;
+      text-align: center;
+      z-index: 10;
+    }
+    canvas {
+        display: block; /* 移除 canvas 下方的空白 */
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.js"></script>
-  <script src="sketch.js"></script>
 </head>
 <body>
-</body>
+  <div id="instruction"></div>
+  <script src="sketch.js"></script> </body>
 </html>
