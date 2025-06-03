@@ -3,41 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>手勢配對學習小遊戲</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      background-color: #f0f0f0;
-      font-family: sans-serif;
-    }
-
-    #gameCanvas {
-      border: 2px solid #333;
-      background-color: #fff;
-    }
-
-    #info {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      padding: 10px;
-      background-color: rgba(255, 255, 255, 0.8);
-      border-radius: 5px;
-    }
-  </style>
-  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.js"></script>
+  <title>數字點點樂</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
+  <script src="script.js"></script> <style>
+    body { margin: 0; }
+    canvas { display: block; }
+  </style>
 </head>
 <body>
-  <div id="info">
-    <p>目標：<span id="target"></span></p>
-    <p>分數：<span id="score">0</span></p>
-  </div>
-  <script src="script.js"></script>
 </body>
 </html>
