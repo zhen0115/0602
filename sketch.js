@@ -1,134 +1,159 @@
-let video;
-let pg; // p5.Graphics 物件
-let gridSpacing = 20;
-let boxSize = 18;
-let circleDiameter = 5;
-let blackColor;
-
-// Handtrack.js 相關變數
-let model = null;
-const modelParams = {
-  flipHorizontal: true, // flip video to make it easier for the model to detect hands
-  maxNumBoxes: 2,       // maximum number of hands to detect
-  iouThreshold: 0.5,    // ioU threshold for non-max suppression
-  scoreThreshold: 0.75, // confidence threshold for predictions.
-};
+let video; // 宣告一個變數來存放攝影機影像
+let score = 0; // 儲存分數
+let currentNumber; // 當前顯示的數字題目
+let options = []; // 儲存英文選項
+let correctOptionIndex; // 正確答案在 options 陣列中的索引
+let numberToWordMap; // 數字到英文單字的映射
 
 function setup() {
+  // 創建一個全螢幕畫布，背景顏色設定為 #5844cb
   createCanvas(windowWidth, windowHeight);
-  background('#ffe6a7');
+  background('#5844cb');
 
+  // 創建攝影機捕捉物件
   video = createCapture(VIDEO);
-  video.size(320, 240); // 設定視訊尺寸 (可依您的攝影機調整，較小尺寸效能較好)
-  video.hide(); // 隱藏攝影機的 HTML 元素
+  video.size(width * 0.8, height * 0.8); // 設定影像寬高為視窗的 80%
+  video.hide(); // 隱藏預設的 HTML 影像元素
 
-  // 創建一個與視訊尺寸相同的 p5.Graphics 物件，背景為黑色
-  pg = createGraphics(video.width, video.height);
-  pg.background(0);
+  // 初始化數字到英文單字的映射
+  numberToWordMap = {
+    0: "zero",
+    1: "one",
+    2: "two",
+    3: "three",
+    4: "four",
+    5: "five",
+    6: "six",
+    7: "seven",
+    8: "eight",
+    9: "nine",
+    10: "ten"
+  };
 
-  blackColor = color(0); // 定義黑色
-
-  // ==== Handtrack.js 初始化 ====
-  // 載入模型
-  handtrack.load(modelParams).then(lModel => {
-    model = lModel;
-    console.log("Handtrack model loaded!");
-  });
+  generateNewQuestion(); // 生成第一道題目
 }
 
 function draw() {
-  background('#ffe6a7'); // 確保每一幀都重新繪製背景
+  // 在 draw 迴圈中重新設定背景顏色，確保每次繪製時都能覆蓋之前的內容
+  background('#5844cb');
 
-  let videoWidth = video.width;
-  let videoHeight = video.height;
-  let displayWidth = windowWidth * 0.8;
-  let displayHeight = windowHeight * 0.8;
+  // 顯示分數
+  fill(255); // 白色文字
+  textSize(32);
+  textAlign(RIGHT, TOP); // 文字右對齊，頂部對齊
+  text(`Score: ${score}`, width - 20, 20); // 顯示在右上角
 
-  // 計算保持原始比例的縮放比例
-  let scaleFactor = min(displayWidth / videoWidth, displayHeight / videoHeight);
+  // 將畫布的原點移動到視窗中央，以便後續定位影像
+  push(); // 儲存當前繪圖狀態
+  translate(width / 2, height / 2);
 
-  // 計算縮放後的影像尺寸
-  let scaledWidth = videoWidth * scaleFactor;
-  let scaledHeight = videoHeight * scaleFactor;
+  // 將 x 軸縮放因子設定為 -1，實現左右顛倒效果
+  scale(-1, 1);
 
-  // 計算影像在視窗中央的 x 和 y 座標
-  let x = (windowWidth - scaledWidth) / 2;
-  let y = (windowHeight - scaledHeight) / 2;
+  // 在中央繪製攝影機影像
+  // 影像的 (x, y) 座標為其左上角，由於我們已將原點移到中心，
+  // 所以需要將影像的左上角往左上偏移影像寬高的一半，使其中心對齊畫布中心。
+  image(video, -video.width / 2, -video.height / 2);
+  pop(); // 恢復之前儲存的繪圖狀態，避免影響後續的文字繪製
 
-  push(); // 保存當前的繪圖狀態
-  translate(x + scaledWidth / 2, y + scaledHeight / 2); // 移動到影像的中心
-  scale(-1, 1); // 水平翻轉
-  image(video, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight); // 繪製翻轉後的影像
-  pop(); // 恢復之前的繪圖狀態
+  // 顯示數字題目（攝影機左邊）
+  fill(255);
+  textSize(48);
+  textAlign(CENTER, CENTER); // 文字置中
+  text(currentNumber, width * 0.1, height / 2); // 顯示在攝影機影像左側大概 10% 寬度處
 
-  // 在 p5.Graphics 物件上繪製彩色方框和黑色圓點
-  pg.background(0); // 每一幀都重新繪製黑色背景
-  pg.strokeWeight(1); // 設定方框的邊框粗細
-  for (let i = 0; i < videoWidth; i += gridSpacing) {
-    for (let j = 0; j < videoHeight; j += gridSpacing) {
-      let color = video.get(i, j); // 取得視訊對應位置的顏色
-      pg.stroke(color); // 設定方框的邊框顏色
-      pg.fill(0, 0, 0, 0); // 方框內部透明
-      pg.rect(i + (gridSpacing - boxSize) / 2, j + (gridSpacing - boxSize) / 2, boxSize, boxSize);
+  // 顯示英文選項（數字題目旁邊）
+  textSize(32);
+  let optionY = height / 2 - (options.length / 2) * 40; // 計算第一個選項的起始 Y 座標
+  for (let i = 0; i < options.length; i++) {
+    let x = width * 0.25; // 選項的 X 座標
+    let y = optionY + i * 50; // 每個選項間隔 50 像素
 
-      // 繪製黑色圓點在方框中央
-      pg.fill(blackColor);
-      pg.noStroke();
-      pg.ellipse(i + gridSpacing / 2, j + gridSpacing / 2, circleDiameter, circleDiameter);
+    // 繪製選項框（可選，幫助視覺化點擊區域）
+    noFill(); // 無填充
+    stroke(255); // 白色邊框
+    rectMode(CENTER); // 以中心點繪製矩形
+    rect(x + textWidth(options[i]) / 2 + 10, y, textWidth(options[i]) + 40, 40); // 繪製一個圍繞文字的矩形
+
+    fill(255); // 白色文字
+    textAlign(LEFT, CENTER); // 文字左對齊，置中
+    text(options[i], x, y); // 繪製選項文字
+  }
+}
+
+// 當視窗大小改變時，重新調整畫布大小和攝影機影像大小
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  video.size(width * 0.8, height * 0.8);
+  background('#5844cb'); // 確保背景顏色在視窗改變時也正確
+}
+
+// 處理滑鼠點擊事件
+function mousePressed() {
+  let optionY = height / 2 - (options.length / 2) * 40; // 計算第一個選項的起始 Y 座標
+
+  for (let i = 0; i < options.length; i++) {
+    let x = width * 0.25; // 選項的 X 座標
+    let y = optionY + i * 50; // 每個選項間隔 50 像素
+
+    // 計算選項的點擊區域
+    let textW = textWidth(options[i]);
+    let rectX = x + textW / 2 + 10;
+    let rectY = y;
+    let rectW = textW + 40;
+    let rectH = 40;
+
+    // 檢查滑鼠是否在當前選項的點擊區域內
+    if (mouseX > rectX - rectW / 2 && mouseX < rectX + rectW / 2 &&
+        mouseY > rectY - rectH / 2 && mouseY < rectY + rectH / 2) {
+      if (i === correctOptionIndex) {
+        score++; // 答對了，加分
+        console.log("Correct! Score: " + score);
+      } else {
+        console.log("Incorrect. Score: " + score);
+      }
+      generateNewQuestion(); // 無論對錯，都換下一題
+      break; // 處理完一個選項後就退出迴圈
+    }
+  }
+}
+
+// 生成新的數字題目和選項
+function generateNewQuestion() {
+  // 生成一個 0 到 10 的隨機整數作為題目
+  currentNumber = floor(random(0, 11));
+
+  // 獲取正確答案的英文單字
+  let correctAnswer = numberToWordMap[currentNumber];
+
+  options = []; // 清空之前的選項
+
+  // 將正確答案加入選項中
+  options.push(correctAnswer);
+
+  // 生成其他兩個隨機的錯誤選項
+  while (options.length < 3) { // 確保有三個選項
+    let randomNum = floor(random(0, 11));
+    let randomWord = numberToWordMap[randomNum];
+    // 確保錯誤選項不重複，且不與正確答案相同
+    if (!options.includes(randomWord)) {
+      options.push(randomWord);
     }
   }
 
-  // 將 p5.Graphics 物件繪製到畫布上，位置與視訊相同 (也做相同的翻轉)
-  push();
-  translate(x + scaledWidth / 2, y + scaledHeight / 2);
-  scale(-1, 1);
-  image(pg, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
-  pop();
+  // 將選項隨機排序
+  shuffleArray(options);
 
-  // ==== Handtrack.js 偵測與繪圖 ====
-  if (model) {
-    model.detect(video.elt).then(predictions => {
-      // 在主要畫布上繪製偵測框 (需要考慮翻轉和縮放)
-      push();
-      translate(x + scaledWidth / 2, y + scaledHeight / 2); // 移動到影像的中心
-      scale(-1, 1); // 水平翻轉 (因為偵測結果是基於原始 video 元素的，我們需要將繪製也翻轉)
+  // 找到正確答案在隨機排序後陣列中的索引
+  correctOptionIndex = options.indexOf(correctAnswer);
 
-      // 繪製偵測框
-      predictions.forEach(p => {
-        let bbox = p.bbox; // [x, y, width, height]
-
-        // 將偵測框的座標從 video 元素的尺寸轉換到 scaled 影像的尺寸
-        let bboxX = bbox[0] * (scaledWidth / videoWidth);
-        let bboxY = bbox[1] * (scaledHeight / videoHeight);
-        let bboxW = bbox[2] * (scaledWidth / videoWidth);
-        let bboxH = bbox[3] * (scaledHeight / videoHeight);
-
-        // 由於我們翻轉了畫面，偵測框的 x 座標也需要調整
-        // 原始 bboxX 是從左邊開始，翻轉後，x 應該從右邊開始
-        // 所以新的 x 座標是 (scaledWidth - bboxX - bboxW)
-        stroke(0, 255, 0); // 綠色邊框
-        strokeWeight(2);
-        noFill();
-        rect(scaledWidth - bboxX - bboxW, bboxY, bboxW, bboxH); // 繪製翻轉後的偵測框
-
-        // 顯示標籤和分數 (可選)
-        fill(255, 0, 0); // 紅色文字
-        noStroke();
-        textSize(16);
-        text(`${p.class} (${nf(p.score, 0, 2)})`, scaledWidth - bboxX - bboxW, bboxY - 5);
-      });
-      pop();
-    });
-  }
+  console.log("New question:", currentNumber, "Options:", options, "Correct:", correctAnswer);
 }
 
-function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
-}
-
-function keyPressed() {
-  // 當按下 's' 鍵時儲存畫布
-  if (key === 's' || key === 'S') {
-    saveCanvas('color_box_black_dot_on_flipped_camera_with_handtrack', 'png');
+// 隨機打亂陣列的函數 (Fisher-Yates shuffle)
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = floor(random(i + 1));
+    [array[i], array[j]] = [array[j], array[i]]; // 交換元素
   }
 }
