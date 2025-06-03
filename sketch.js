@@ -12,7 +12,11 @@ let touchPointId = null; // 追蹤哪個手指正在拖曳
 async function setup() {
     canvas = createCanvas(windowWidth, windowHeight);
     ctx = canvas.drawingContext;
-    video = createCapture(VIDEO);
+    video = createCapture(VIDEO, () => {
+        console.log('Video capture ready.');
+    }, (err) => {
+        console.error('Error capturing video:', err);
+    });
     video.size(640, 480);
     video.hide();
 
