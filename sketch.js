@@ -1,141 +1,209 @@
-let capture; // 宣告一個變數來儲存攝影機影像
-let handpose; // 宣告一個變數來儲存 Handpose 模型
-let predictions = []; // 宣告一個陣列來儲存手部偵測的結果
+let video;
+let pg; // p5.Graphics 物件
+let currentNumber;
+let options = [];
+let correctAnswer;
+let score = 0;
+let gameStarted = false;
+let instructionDiv;
+let optionPositions = [];
+let optionRadius = 50; // 稍微增大選項的觸碰範圍
+let numberX, numberY;
+let numberSize = 64;
+let canAnswer = true; // 控制是否可以回答
+let answerDelay = 500; // 0.5 秒的延遲
+let handPosition = null; // 追蹤手部中心位置 (簡化)
+let touchThreshold = 60; // 觸碰的距離閾值
+let brightnessThreshold = 150; // 亮度閾值
+let brightPixelThreshold = 10; // 最少亮點數
+
+let numberPairs = [
+  { number: 1, word: "one" },
+  { number: 2, word: "two" },
+  { number: 3, word: "three" },
+  { number: 4, word: "four" },
+  { number: 5, word: "five" }
+  // 可以添加更多數字和單字
+];
 
 function setup() {
-  // 創建一個與瀏覽器視窗同寬同高的畫布，實現全螢幕效果
   createCanvas(windowWidth, windowHeight);
-  
-  // 設定畫布背景顏色為 #5844cb
-  background('#5844cb'); 
+  background('#ffe6a7');
 
-  // 獲取攝影機影像
-  capture = createCapture(VIDEO);
-  // 隱藏攝影機元素，因為我們會在畫布上繪製它
-  capture.hide();
+  video = createCapture(VIDEO);
+  video.size(640, 480);
+  video.hide();
 
-  // 載入 Handpose 模型
-  // 當模型載入完成後，會調用 modelReady 函數
-  handpose = ml5.handpose(capture, modelReady);
+  pg = createGraphics(video.width, video.height);
 
-  // 設定事件監聽器：當偵測到手部時，會觸發 'hand' 事件
-  // predictions 陣列會包含所有偵測到的手部資訊
-  handpose.on('hand', results => {
-    predictions = results;
-  });
+  instructionDiv = createDiv('將你的食指移動到對應的英文單字上');
+  instructionDiv.id('instruction');
+
+  startGame();
 }
 
-function modelReady() {
-  // 在控制台輸出訊息，表示 Handpose 模型已成功載入
-  console.log('Handpose 模型載入完成！');
+function startGame() {
+  score = 0;
+  generateQuestion();
+  gameStarted = true;
+  instructionDiv.html('將你的食指移動到對應的英文單字上');
+  canAnswer = true;
+  handPosition = null; // 重置手部位置
+}
+
+function generateQuestion() {
+  let randomIndex = floor(random(numberPairs.length));
+  let pair = numberPairs[randomIndex];
+  currentNumber = pair.number;
+  correctAnswer = pair.word;
+
+  options = [correctAnswer];
+  while (options.length < 3) {
+    let wrongPair = random(numberPairs);
+    if (wrongPair.word !== correctAnswer && !options.includes(wrongPair.word)) {
+      options.push(wrongPair.word);
+    }
+  }
+  shuffle(options);
+
+  numberX = width / 4;
+  numberY = height / 2;
+
+  optionPositions = [
+    { x: width * 0.6, y: height / 3 },
+    { x: width * 0.8, y: height / 2 },
+    { x: width * 0.6, y: height * 2 / 3 }
+  ];
 }
 
 function draw() {
-  // 再次設定背景顏色，以清除上一幀的內容，避免殘影
-  background('#5844cb'); 
+  background('#ffe6a7');
 
-  // 獲取攝影機影像的原始寬度和高度
-  let imgWidth = capture.width;
-  let imgHeight = capture.height;
-  let displayWidth = imgWidth;
-  let displayHeight = imgHeight;
+  let videoWidth = video.width;
+  let videoHeight = video.height;
+  let displayWidth = windowWidth * 0.8;
+  let displayHeight = windowHeight * 0.8;
+  let scaleFactor = min(displayWidth / videoWidth, displayHeight / videoHeight);
+  let scaledWidth = videoWidth * scaleFactor;
+  let scaledHeight = videoHeight * scaleFactor;
+  let x = (windowWidth - scaledWidth) / 2;
+  let y = (windowHeight - scaledHeight) / 2;
 
-  // 確保攝影機影像已經載入並有尺寸資訊
-  if (imgWidth > 0 && imgHeight > 0) {
-    // 計算影像的長寬比和視窗的長寬比
-    let aspectRatio = imgWidth / imgHeight;
-    let windowAspectRatio = width / height;
-
-    // 根據長寬比，縮放影像以適應視窗並保持比例
-    if (aspectRatio > windowAspectRatio) {
-      // 如果影像比視窗寬，以視窗寬度為基準縮放
-      displayHeight = width / aspectRatio;
-      displayWidth = width;
-    } else {
-      // 如果影像比視窗高，以視窗高度為基準縮放
-      displayWidth = height * aspectRatio;
-      displayHeight = height;
-    }
-  }
-
-  // 計算攝影機影像在畫布上置中顯示的 x, y 座標
-  let x = (width - displayWidth) / 2;
-  let y = (height - displayHeight) / 2;
-  
-  // 保存當前的繪圖狀態，以便後續的變換不會影響到其他繪圖
   push();
-  // 將畫布的原點從左上角移動到右上角
-  translate(width, 0); 
-  // 沿著 Y 軸翻轉畫布，實現左右顛倒效果
-  scale(-1, 1); 
-  
-  // 在計算好的位置繪製左右顛倒的攝影機影像
-  // 由於畫布已經翻轉，繪製的 x 座標需要重新計算
-  image(capture, width - x - displayWidth, y, displayWidth, displayHeight); 
-  // 恢復之前保存的繪圖狀態
+  translate(x + scaledWidth / 2, y + scaledHeight / 2);
+  scale(-1, 1);
+  image(video, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
   pop();
 
-  // 如果 Handpose 模型偵測到手部 (predictions 陣列有內容)
-  if (predictions.length > 0) {
-    // 遍歷所有偵測到的手部 (可能同時偵測到多隻手)
-    for (let i = 0; i < predictions.length; i++) {
-      let hand = predictions[i];
-      let keypoints = hand.landmarks; // 手部的 21 個關鍵點陣列
+  fill(0);
+  textSize(numberSize);
+  textAlign(CENTER, CENTER);
+  text(currentNumber, numberX, numberY);
 
-      // 設定線條樣式：粗細為 4 像素，顏色為紅色，不填充任何形狀
-      strokeWeight(4);
-      stroke(255, 0, 0); 
-      noFill();
+  textSize(24);
+  for (let i = 0; i < options.length; i++) {
+    fill(0, 100, 200);
+    ellipse(optionPositions[i].x, optionPositions[i].y, optionRadius * 2);
+    fill(255);
+    textAlign(CENTER, CENTER);
+    text(options[i], optionPositions[i].x, optionPositions[i].y);
+  }
 
-      // 由於攝影機影像已經左右顛倒並置中顯示，Handpose 返回的關鍵點座標是基於原始影像的
-      // 我們需要將這些關鍵點座標轉換到畫布上正確的位置
-      let adjustedKeypoints = keypoints.map(kp => {
-        // 將關鍵點的 x 座標從原始影像比例映射到顯示影像的比例
-        // 並考慮左右翻轉和置中偏移
-        let adjustedX = width - (kp[0] / imgWidth) * displayWidth - (width - x - displayWidth);
-        // 將關鍵點的 y 座標從原始影像比例映射到顯示影像的比例
-        // 並考慮置中偏移
-        let adjustedY = (kp[1] / imgHeight) * displayHeight + y;
-        return [adjustedX, adjustedY];
-      });
+  if (gameStarted) {
+    video.loadPixels();
+    if (video.pixels.length > 0) {
+      // 簡化手部中心估計 (尋找畫面中心附近的亮點)
+      let avgX = 0;
+      let avgY = 0;
+      let brightPixels = 0;
+      let searchRadius = 50; // 在畫面中心附近搜尋
 
-      // 繪製各個手指的連線
+      for (let i = -searchRadius; i < searchRadius; i += 5) {
+        for (let j = -searchRadius; j < searchRadius; j += 5) {
+          let checkX = floor(video.width / 2 + i);
+          let checkY = floor(video.height / 2 + j);
+          if (checkX >= 0 && checkX < video.width && checkY >= 0 && checkY < video.height) {
+            let index = (checkY * video.width + checkX) * 4;
+            let brightness = (video.pixels[index] + video.pixels[index + 1] + video.pixels[index + 2]) / 3;
+            if (brightness > brightnessThreshold) { // 判斷為亮點 (可能的手指)
+              avgX += checkX;
+              avgY += checkY;
+              brightPixels++;
+            }
+          }
+        }
+      }
 
-      // 拇指 (關鍵點 0 到 4)
-      for (let j = 0; j < 4; j++) {
-        line(adjustedKeypoints[j][0], adjustedKeypoints[j][1], adjustedKeypoints[j+1][0], adjustedKeypoints[j+1][1]);
+      if (brightPixels > brightPixelThreshold) { // 至少要有一定數量的亮點才認為偵測到手
+        handPosition = {
+          x: map(avgX / brightPixels, 0, video.width, x, x + scaledWidth),
+          y: map(avgY / brightPixels, 0, video.height, y, y + scaledHeight)
+        };
+
+        // 繪製一個小圓圈表示偵測到的手部位置
+        fill(255, 0, 0, 150);
+        ellipse(handPosition.x, handPosition.y, 20);
+
+        console.log("手部位置:", handPosition);
+
+        // 檢查手部位置是否靠近選項
+        if (handPosition && canAnswer) {
+          for (let i = 0; i < options.length; i++) {
+            let distance = dist(handPosition.x, handPosition.y, optionPositions[i].x, optionPositions[i].y);
+            console.log(`與選項 ${i} ('${options[i]}') 的距離:`, distance);
+            if (distance < touchThreshold) {
+              console.log(`觸碰到選項 ${i} ('${options[i]}')`);
+              if (options[i] === correctAnswer) {
+                score++;
+                instructionDiv.html('答對了！分數：' + score);
+                canAnswer = false;
+                setTimeout(() => {
+                  generateQuestion();
+                  canAnswer = true;
+                  handPosition = null; // 重置手部位置
+                }, answerDelay);
+              } else {
+                instructionDiv.html('再試一次！分數：' + score);
+              }
+              break; // 避免同時觸發多個選項
+            }
+          }
+        }
+      } else {
+        handPosition = null; // 沒有偵測到明顯的手部
       }
-      // 食指 (關鍵點 5 到 8)
-      for (let j = 5; j < 8; j++) {
-        line(adjustedKeypoints[j][0], adjustedKeypoints[j][1], adjustedKeypoints[j+1][0], adjustedKeypoints[j+1][1]);
-      }
-      // 中指 (關鍵點 9 到 12)
-      for (let j = 9; j < 12; j++) {
-        line(adjustedKeypoints[j][0], adjustedKeypoints[j][1], adjustedKeypoints[j+1][0], adjustedKeypoints[j+1][1]);
-      }
-      // 無名指 (關鍵點 13 到 16)
-      for (let j = 13; j < 16; j++) {
-        line(adjustedKeypoints[j][0], adjustedKeypoints[j][1], adjustedKeypoints[j+1][0], adjustedKeypoints[j+1][1]);
-      }
-      // 小指 (關鍵點 17 到 20)
-      for (let j = 17; j < 20; j++) {
-        line(adjustedKeypoints[j][0], adjustedKeypoints[j][1], adjustedKeypoints[j+1][0], adjustedKeypoints[j+1][1]);
-      }
-      
-      // 繪製手掌部分的連線，形成手掌輪廓
-      line(adjustedKeypoints[0][0], adjustedKeypoints[0][1], adjustedKeypoints[5][0], adjustedKeypoints[5][1]);     // 手腕到食指根部
-      line(adjustedKeypoints[5][0], adjustedKeypoints[5][1], adjustedKeypoints[9][0], adjustedKeypoints[9][1]);     // 食指根部到中指根部
-      line(adjustedKeypoints[9][0], adjustedKeypoints[9][1], adjustedKeypoints[13][0], adjustedKeypoints[13][1]);   // 中指根部到無名指根部
-      line(adjustedKeypoints[13][0], adjustedKeypoints[13][1], adjustedKeypoints[17][0], adjustedKeypoints[17][1]); // 無名指根部到小指根部
-      line(adjustedKeypoints[17][0], adjustedKeypoints[17][1], adjustedKeypoints[0][0], adjustedKeypoints[0][1]);   // 小指根部到手腕 (完成閉合)
     }
+
+    fill(0);
+    textSize(20);
+    textAlign(LEFT, TOP);
+    text('分數: ' + score, 20, 20);
   }
 }
 
-// 當瀏覽器視窗大小改變時，此函數會自動被調用
 function windowResized() {
-  // 重新調整畫布大小為當前視窗的寬度和高度，保持全螢幕
   resizeCanvas(windowWidth, windowHeight);
-  // 重新設定背景顏色
-  background('#5844cb'); 
+  optionPositions = [
+    { x: width * 0.6, y: height / 3 },
+    { x: width * 0.8, y: height / 2 },
+    { x: width * 0.6, y: height * 2 / 3 }
+  ];
+  numberX = width / 4;
+  numberY = height / 2;
+}
+
+function keyPressed() {
+  if (key === 'r' || key === 'R') {
+    startGame();
+  }
+  if (key === 's' || key === 'S') {
+    saveCanvas('math_pairing_game', 'png');
+  }
+}
+
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
 }
