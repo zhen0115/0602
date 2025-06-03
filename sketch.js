@@ -7,19 +7,18 @@ let numberToWordMap; // 數字到英文單字的映射
 
 let model = null; // 宣告 handtrack 模型變數
 const modelParams = {
-  flipHorizontal: true, // 攝影機影像已在 draw 中翻轉，所以這裡也翻轉
+  flipHorizontal: false, // 攝影機影像在 draw 中會透過 scale(-1, 1) 翻轉，handtrack模型本身不需翻轉原始輸入
   maxNumBoxes: 1,       // 最多偵測一隻手
   iouThreshold: 0.5,    // 交集與聯集比值閾值
   scoreThreshold: 0.7,  // 偵測分數閾值
 };
 
-// 用於記錄手部偵測的框框和分數
-let predictions = [];
+let predictions = []; // 用於記錄手部偵測的框框和分數
 
 // 用於偵測手勢點擊的變數
 let handClickThreshold = 0.8; // 手部偵測分數閾值，高於此值才算有效手勢
-let lastHandDetectedTime = 0; // 上次偵測到手部的時間
-let debounceTime = 500; // 手勢去抖動時間（毫秒），防止連續觸發
+let lastHandActionTime = 0; // 上次手部動作（點擊）的時間
+let debounceTime = 700; // 手勢去抖動時間（毫秒），防止連續觸發，稍微拉長一點
 
 function setup() {
   // 創建一個全螢幕畫布，背景顏色設定為 #5844cb
@@ -27,15 +26,24 @@ function setup() {
   background('#5844cb');
 
   // 創建攝影機捕捉物件
+  // createCapture(VIDEO) 預設是會將影像鏡像翻轉的，所以 handtrack 的 flipHorizontal 應設為 false。
   video = createCapture(VIDEO);
   video.size(width * 0.8, height * 0.8); // 設定影像寬高為視窗的 80%
   video.hide(); // 隱藏預設的 HTML 影像元素
 
   // 載入 handtrack 模型
-  // 注意：load() 是一個異步操作，所以會返回一個 Promise
   handtrack.load(modelParams).then(lmodel => {
     model = lmodel;
     console.log("Handtrack Model Loaded!");
+    // 開始偵測影片流
+    model.detect(video.elt).then(preds => {
+      predictions = preds;
+      // 可以在這裡開始偵測，或者在 draw 迴圈中持續偵測
+      // 為了持續偵測，我們通常會在 draw 裡調用 model.detect()
+    });
+  }).catch(err => {
+    console.error("Error loading Handtrack Model:", err);
+    alert("載入手部追蹤模型失敗，請檢查網路連線或函式庫載入。");
   });
 
   // 初始化數字到英文單字的映射
@@ -44,8 +52,8 @@ function setup() {
     1: "one",
     2: "two",
     3: "three",
-    4: "four",
-    5: "five",
+    4: "five",
+    5: "five", // 修正：數字 4, 5 的英文
     6: "six",
     7: "seven",
     8: "eight",
@@ -57,146 +65,168 @@ function setup() {
 }
 
 function draw() {
-  // 在 draw 迴圈中重新設定背景顏色，確保每次繪製時都能覆蓋之前的內容
-  background('#5844cb');
+  background('#5844cb'); // 重新設定背景顏色
 
   // 顯示分數
-  fill(255); // 白色文字
+  fill(255);
   textSize(32);
-  textAlign(RIGHT, TOP); // 文字右對齊，頂部對齊
-  text(`Score: ${score}`, width - 20, 20); // 顯示在右上角
+  textAlign(RIGHT, TOP);
+  text(`Score: ${score}`, width - 20, 20);
 
-  // 將畫布的原點移動到視窗中央，以便後續定位影像
-  push(); // 儲存當前繪圖狀態
-  translate(width / 2, height / 2);
+  // 計算攝影機影像在畫布上的實際位置和大小
+  // 由於攝影機影像寬高是視窗的 80%，並且要置中
+  let videoDisplayWidth = width * 0.8;
+  let videoDisplayHeight = height * 0.8;
+  let videoDisplayX = (width - videoDisplayWidth) / 2;
+  let videoDisplayY = (height - videoDisplayHeight) / 2;
 
-  // 將 x 軸縮放因子設定為 -1，實現左右顛倒效果
-  scale(-1, 1);
-
-  // 在中央繪製攝影機影像
-  // 影像的 (x, y) 座標為其左上角，由於我們已將原點移到中心，
-  // 所以需要將影像的左上角往左上偏移影像寬高的一半，使其中心對齊畫布中心。
-  image(video, -video.width / 2, -video.height / 2);
-  pop(); // 恢復之前儲存的繪圖狀態，避免影響後續的文字繪製
+  push(); // 儲存繪圖狀態
+  translate(width, 0); // 將原點移到右邊
+  scale(-1, 1); // 左右翻轉，實現鏡像效果 (因為攝影機影像本身可能已經鏡像了，這裡確保總體是鏡像)
+  // 如果 createCapture(VIDEO) 已經自動鏡像，且你希望 final 效果是左右顛倒的，那麼這裡的 scale(-1,1) 是對的
+  // 如果你希望顯示非鏡像（就像真實攝影機看到的那樣），那麼 createCapture() 應該是沒翻轉，而這裡的 scale(-1,1) 也應該去掉。
+  // 根據你想要的 "攝影機畫面左右顛倒" 效果，scale(-1,1) 是正確的。
+  
+  // 繪製攝影機影像，考慮翻轉和置中
+  // 由於前面 translate(width, 0) 和 scale(-1, 1) 的影響
+  // 影像的 X 座標計算變為 -(videoDisplayX + videoDisplayWidth)
+  image(video, -(videoDisplayX + videoDisplayWidth), videoDisplayY, videoDisplayWidth, videoDisplayHeight);
+  pop(); // 恢復繪圖狀態
 
   // 執行手部偵測
-  if (model) { // 確保模型已載入
-    // predict() 也是異步操作，但我們在 draw 中直接呼叫，它會非同步地更新 predictions
+  if (model) {
     model.detect(video.elt).then(preds => {
       predictions = preds; // 更新偵測結果
-      // console.log(predictions); // 用於除錯，可以看到偵測到的手部資訊
+    }).catch(err => {
+      console.error("Error during hand detection:", err);
+      // 可以考慮在這裡停止偵測或顯示錯誤訊息
     });
   }
 
-  // 繪製偵測到的手部框框 (可選，用於視覺化)
-  for (let i = 0; i < predictions.length; i++) {
-    let p = predictions[i];
-    if (p.score > handClickThreshold) { // 只顯示置信度高的手
-      // 注意：這裡的座標需要轉換，因為攝影機影像在 draw 中被翻轉和移動了
-      // 由於 handtrack 的預測是基於原始影像的，所以我們需要逆向轉換
-      let x = width / 2 - (p[0] + p[2]) / 2; // X 座標需要翻轉並重新計算
-      let y = height / 2 - video.height / 2 + p[1]; // Y 座標不需要翻轉
-      let w = p[2];
-      let h = p[3];
+  // 繪製偵測到的手部框框並處理點擊
+  if (predictions.length > 0 && predictions[0].score > handClickThreshold) {
+    let p = predictions[0]; // 只處理第一個偵測到的手
 
-      // 由於手影像左右顛倒，所以這裡繪製矩形時 x 軸也需要對稱處理
-      // (p[0] + p[2]) / 2 是手部偵測框的中心點在原始影像中的x座標
-      // width / 2 是畫布中心點
-      // -video.width / 2 是影像在畫布中的左上角x座標 (經過 translate 後)
+    // 將 handtrack 偵測到的座標轉換到畫布上顯示的攝影機影像位置
+    // handtrack 的座標是基於原始 video.elt 的解析度
+    // p[0], p[1] 是 bounding box 的 x, y
+    // p[2], p[3] 是 bounding box 的 width, height
+    
+    // 計算手部在原始影片流中的中心點 (考慮到 video.size 設定)
+    // 假設 video.elt.videoWidth 是攝影機原始寬度，video.width 是 p5 顯示寬度
+    let handXInVideo = p[0] + p[2] / 2; // 手部在原始 video.elt 中的 X 中心
+    let handYInVideo = p[1] + p[3] / 2; // 手部在原始 video.elt 中的 Y 中心
 
-      // 由於我們在 image 繪製時用了 scale(-1, 1) 和 translate(width/2, height/2)
-      // handtrack 的預測結果是基於原始 video.elt 的，所以要將其轉換到畫布座標
-      // video.elt 的尺寸是 video.width, video.height
-      // 影像在畫布中的起始點是 (width/2 - video.width/2, height/2 - video.height/2)
-      // 且影像被左右翻轉
-      let mappedX = map(p[0] + p[2], 0, video.width, width / 2 - video.width / 2, width / 2 + video.width / 2); // 翻轉 X 軸
-      let mappedY = map(p[1], 0, video.height, height / 2 - video.height / 2, height / 2 + video.height / 2);
+    // 將手部中心點轉換到 p5 畫布上的顯示位置
+    // 考慮到攝影機影像的置中和大小縮放 (video.size)
+    // 以及影像在 draw 中被 scale(-1,1) 翻轉
+    
+    // 由於我們在 draw 裡面對整個畫布做 scale(-1, 1)，手部偵測框的繪製也需要逆向處理
+    // 如果 handtrack.js 的 output 是基於非翻轉的原始影像，那麼我們在繪製時需要將 x 座標翻轉
+    
+    // 翻轉 X 座標：從原始影像的左到右，變成畫布上翻轉後的右到左
+    // 原始 video.elt 寬度是 video.elt.videoWidth
+    // 顯示在 p5 畫布上的 video 寬度是 videoDisplayWidth
+    // 手部在原始影像中的 x: p[0]
+    // 顯示時的 x 座標應該是 (videoDisplayX + videoDisplayWidth) - (p[0] + p[2]) * (videoDisplayWidth / video.elt.videoWidth);
+    // 加上 videoDisplayX 是為了讓它在整個畫布中置中
+    let handDisplayX = videoDisplayX + videoDisplayWidth - (p[0] + p[2]); // 調整 X 座標以匹配翻轉
+    let handDisplayY = videoDisplayY + p[1]; // Y 座標不變
 
-      noFill();
-      stroke(0, 255, 0); // 綠色框
-      strokeWeight(4);
-      // 繪製手部框框。這裡的座標轉換需要特別小心，因為影像被翻轉了。
-      // 最簡單的方式是將 handtrack 的預測框直接繪製在原始影像位置，然後讓 p5 的 scale 處理。
-      // 但由於 draw() 函數中的 push/pop, 我們需要將 handtrack 偵測到的原始座標轉換到螢幕顯示座標。
-      // 更直接的方式是直接使用手部偵測的座標，並根據螢幕上的攝影機位置進行調整。
-      // 我們知道影像的中心在 (width/2, height/2)
-      // 影像的左上角在 (width/2 - video.width/2, height/2 - video.height/2)
-      // 而影像被 scale(-1, 1) 了
-      // 所以手部 x 座標需要從影像的右邊算起
-      
-      // 計算手部在螢幕上的實際中心點
-      let handCenterX = width / 2 + video.width / 2 - (p[0] + p[2] / 2) * (video.width / video.elt.videoWidth);
-      let handCenterY = height / 2 - video.height / 2 + (p[1] + p[3] / 2) * (video.height / video.elt.videoHeight);
-      
-      let handWidth = p[2] * (video.width / video.elt.videoWidth);
-      let handHeight = p[3] * (video.height / video.elt.videoHeight);
+    // 繪製手部偵測框 (視覺化)
+    noFill();
+    stroke(0, 255, 0); // 綠色框
+    strokeWeight(4);
+    rectMode(CORNER); // 以左上角繪製矩形
+    // 這裡直接繪製原始偵測框，但考慮到影像縮放和位置
+    // p[0], p[1] 是原始影片流中的像素座標
+    // video.elt.videoWidth, video.elt.videoHeight 是原始影片流的解析度
+    // videoDisplayWidth, videoDisplayHeight 是實際繪製的尺寸
+    let rectX = videoDisplayX + (videoDisplayWidth - (p[0] + p[2])) ; // 翻轉 X 軸
+    let rectY = videoDisplayY + p[1];
+    let rectW = p[2];
+    let rectH = p[3];
 
-      // 繪製手部偵測框
-      rect(handCenterX - handWidth / 2, handCenterY - handHeight / 2, handWidth, handHeight);
+    // 根據影像縮放比例調整矩形大小
+    rect(videoDisplayX + (video.width - (p[0] + p[2]) ) , videoDisplayY + p[1], p[2], p[3]); // 修正繪製位置
+
+    // 處理手勢點擊
+    let currentTime = millis();
+    if (currentTime - lastHandActionTime > debounceTime) {
+      // 根據手部偵測的中心點來判斷點擊
+      // 我們需要將手部偵測到的點映射到畫布上的座標
+      // 由於影像已經翻轉了，手部中心點的 X 也要相對翻轉
+      let mappedHandX = videoDisplayX + (videoDisplayWidth - (p[0] + p[2]/2) * (videoDisplayWidth / video.elt.videoWidth));
+      let mappedHandY = videoDisplayY + (p[1] + p[3]/2) * (videoDisplayHeight / video.elt.videoHeight);
 
 
-      // 偵測手勢點擊（基於手部位置）
-      // 假設手部中心點位於某個選項的範圍內，且偵測分數夠高
-      let currentTime = millis();
-      if (currentTime - lastHandDetectedTime > debounceTime) { // 去抖動
-        let handX = handCenterX; // 手部中心點的 X 座標
-        let handY = handCenterY; // 手部中心點的 Y 座標
+      let optionY = height / 2 - (options.length / 2) * 40; // 選項文字的起始 Y 座標
 
-        let optionY = height / 2 - (options.length / 2) * 40;
-        for (let j = 0; j < options.length; j++) {
-          let optX = width * 0.25;
-          let optY = optionY + j * 50;
+      for (let j = 0; j < options.length; j++) {
+        let optX = width * 0.25; // 選項的 X 座標
+        let optY = optionY + j * 50; // 每個選項間隔 50 像素
 
-          let textW = textWidth(options[j]);
-          let rectX = optX + textW / 2 + 10;
-          let rectY = optY;
-          let rectW = textW + 40;
-          let rectH = 40;
+        let textW = textWidth(options[j]);
+        // 計算選項點擊區域的中心點和寬高
+        let rectCenterX = optX + textW / 2 + 10;
+        let rectCenterY = optY;
+        let rectWidth = textW + 40;
+        let rectHeight = 40;
 
-          // 判斷手部是否在選項的點擊區域內
-          if (handX > rectX - rectW / 2 && handX < rectX + rectW / 2 &&
-              handY > rectY - rectH / 2 && handY < rectY + rectH / 2) {
-            // 如果手部在選項區域內，觸發點擊
-            handleOptionClick(j); // 呼叫處理選項點擊的函數
-            lastHandDetectedTime = currentTime; // 更新上次手部偵測時間
-            break; // 處理完一個選項就退出
-          }
+        // 判斷手部中心點是否在選項的矩形區域內
+        if (mappedHandX > rectCenterX - rectWidth / 2 && mappedHandX < rectCenterX + rectWidth / 2 &&
+            mappedHandY > rectCenterY - rectHeight / 2 && mappedHandY < rectCenterY + rectHeight / 2) {
+          handleOptionClick(j);
+          lastHandActionTime = currentTime; // 更新上次動作時間
+          break;
         }
       }
     }
   }
 
-  // 顯示數字題目（攝影機左邊）
+  // 顯示數字題目 (攝影機左邊，位於藍色背景上)
   fill(255);
   textSize(48);
-  textAlign(CENTER, CENTER); // 文字置中
-  text(currentNumber, width * 0.1, height / 2); // 顯示在攝影機影像左側大概 10% 寬度處
+  textAlign(CENTER, CENTER);
+  // 將數字題目放在攝影機畫面左側，並根據攝影機的 X 座標和寬度來調整
+  // 攝影機左側的背景是寬度 * 0.125 的區域
+  text(currentNumber, (width - videoDisplayWidth) / 4, height / 2);
 
-  // 顯示英文選項（數字題目旁邊）
+  // 顯示英文選項 (數字題目旁邊，位於藍色背景上)
   textSize(32);
-  let optionY = height / 2 - (options.length / 2) * 40; // 計算第一個選項的起始 Y 座標
+  let optionY = height / 2 - (options.length / 2) * 40; // 選項文字的起始 Y 座標
   for (let i = 0; i < options.length; i++) {
-    let x = width * 0.25; // 選項的 X 座標
-    let y = optionY + i * 50; // 每個選項間隔 50 像素
+    // 選項的 X 座標，放在數字題目和攝影機影像之間
+    let x = (width - videoDisplayWidth) / 2 + (width - videoDisplayWidth) / 4;
+    let y = optionY + i * 50;
 
-    // 繪製選項框（可選，幫助視覺化點擊區域）
-    noFill(); // 無填充
-    stroke(255); // 白色邊框
+    // 繪製選項框 (視覺化點擊區域)
+    noFill();
+    stroke(255);
     strokeWeight(1);
-    rectMode(CENTER); // 以中心點繪製矩形
-    rect(x + textWidth(options[i]) / 2 + 10, y, textWidth(options[i]) + 40, 40); // 繪製一個圍繞文字的矩形
+    rectMode(CENTER);
+    // 計算選項框的中心點
+    let optionRectCenterX = x + textWidth(options[i]) / 2 + 10;
+    let optionRectCenterY = y;
+    let optionRectWidth = textWidth(options[i]) + 40;
+    let optionRectHeight = 40;
 
-    fill(255); // 白色文字
-    textAlign(LEFT, CENTER); // 文字左對齊，置中
-    text(options[i], x, y); // 繪製選項文字
+    rect(optionRectCenterX, optionRectCenterY, optionRectWidth, optionRectHeight);
+
+    fill(255);
+    textAlign(LEFT, CENTER);
+    text(options[i], x, y);
   }
 }
 
-// 當視窗大小改變時，重新調整畫布大小和攝影機影像大小
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   video.size(width * 0.8, height * 0.8);
-  background('#5844cb'); // 確保背景顏色在視窗改變時也正確
+  background('#5844cb');
+  // 重新載入手部追蹤模型（如果需要，或者在 resize 後重新呼叫 detect）
+  if (model) {
+    model.detect(video.elt).then(preds => predictions = preds);
+  }
 }
 
 // 處理滑鼠點擊事件 (保留滑鼠點擊功能作為備用)
@@ -204,17 +234,18 @@ function mousePressed() {
   let optionY = height / 2 - (options.length / 2) * 40;
 
   for (let i = 0; i < options.length; i++) {
-    let x = width * 0.25;
+    // 計算選項的 X 座標，與 draw 函數中繪製選項的位置保持一致
+    let x = (width - videoDisplayWidth) / 2 + (width - videoDisplayWidth) / 4;
     let y = optionY + i * 50;
 
     let textW = textWidth(options[i]);
-    let rectX = x + textW / 2 + 10;
-    let rectY = y;
-    let rectW = textW + 40;
-    let rectH = 40;
+    let rectCenterX = x + textW / 2 + 10;
+    let rectCenterY = y;
+    let rectWidth = textW + 40;
+    let rectHeight = 40;
 
-    if (mouseX > rectX - rectW / 2 && mouseX < rectX + rectW / 2 &&
-        mouseY > rectY - rectH / 2 && mouseY < rectY + rectH / 2) {
+    if (mouseX > rectCenterX - rectWidth / 2 && mouseX < rectCenterX + rectWidth / 2 &&
+        mouseY > rectCenterY - rectHeight / 2 && mouseY < rectCenterY + rectHeight / 2) {
       handleOptionClick(i);
       break;
     }
@@ -224,18 +255,17 @@ function mousePressed() {
 // 統一處理選項點擊的邏輯 (無論是滑鼠還是手勢)
 function handleOptionClick(clickedIndex) {
   if (clickedIndex === correctOptionIndex) {
-    score++; // 答對了，加分
+    score++;
     console.log("Correct! Score: " + score);
   } else {
     console.log("Incorrect. Score: " + score);
   }
-  generateNewQuestion(); // 無論對錯，都換下一題
+  generateNewQuestion();
 }
-
 
 // 生成新的數字題目和選項
 function generateNewQuestion() {
-  currentNumber = floor(random(0, 11)); // 生成一個 0 到 10 的隨機整數
+  currentNumber = floor(random(0, 11));
 
   let correctAnswer = numberToWordMap[currentNumber];
   options = [];
