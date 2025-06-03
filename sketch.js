@@ -1,18 +1,18 @@
+// Hand Pose Detection with ml5.js
+// https://thecodingtrain.com/tracks/ml5js-beginners-guide/ml5/hand-pose
+
 let video;
 let handPose;
 let hands = [];
-let learningTargets = [
-  { target: "A", gesture: "thumbUp" },
-  { target: "B", gesture: "twoFingers" } // 你需要實現 "twoFingers" 的檢測
-  // 可以添加更多字母和手勢
-];
-let currentTargetIndex = 0;
-let currentTarget;
+
+let targetNumber;
+let dots = [];
 let score = 0;
-let targetDisplay;
-let scoreDisplay;
+let timer = 10; // 倒計時秒數
+let gameStarted = false;
 
 function preload() {
+  // Initialize HandPose model with flipped video input
   handPose = ml5.handPose({ flipped: true });
 }
 
@@ -21,18 +21,43 @@ function setup() {
   video = createCapture(VIDEO, { flipped: true });
   video.hide();
 
+  // Start detecting hands
   handPose.detectStart(video, gotHands);
 
-  targetDisplay = select('#target');
-  scoreDisplay = select('#score');
-
-  nextTarget();
+  startGame();
 }
 
-function nextTarget() {
-  currentTargetIndex = floor(random(learningTargets.length));
-  currentTarget = learningTargets[currentTargetIndex];
-  targetDisplay.html(currentTarget.target);
+function startGame() {
+  score = 0;
+  timer = 10;
+  dots = [];
+  generateDots(5); // 產生初始數量的數字圓點
+  pickTargetNumber();
+  gameStarted = true;
+  setTimeout(gameOver, timer * 1000); // 設定遊戲結束倒計時
+}
+
+function gameOver() {
+  gameStarted = false;
+  console.log("遊戲結束！你的得分是：" + score);
+  // 可以在這裡顯示遊戲結束畫面或按鈕重新開始
+}
+
+function pickTargetNumber() {
+  targetNumber = floor(random(1, 10)); // 隨機選擇 1 到 9 的數字作為目標
+  console.log("目標數字：", targetNumber);
+}
+
+function generateDots(num) {
+  for (let i = 0; i < num; i++) {
+    dots.push({
+      x: random(width * 0.2, width * 0.8), // 避免太靠近邊緣
+      y: random(height * 0.2, height * 0.8),
+      number: floor(random(1, 10)),
+      radius: 30,
+      hit: false // 標記是否被擊中
+    });
+  }
 }
 
 function gotHands(results) {
@@ -42,57 +67,84 @@ function gotHands(results) {
 function draw() {
   image(video, 0, 0);
 
+  if (!gameStarted) {
+    // 顯示遊戲開始畫面
+    textSize(32);
+    fill(255);
+    textAlign(CENTER, CENTER);
+    text("數字點點樂", width / 2, height / 2 - 50);
+    textSize(20);
+    text("揮動你的手開始遊戲", width / 2, height / 2);
+    return;
+  }
+
+  // 顯示目標數字和分數、倒計時
+  textSize(24);
+  fill(255);
+  textAlign(LEFT, TOP);
+  text("目標數字: " + targetNumber, 10, 10);
+  text("分數: " + score, 10, 40);
+  text("時間: " + floor(timer), 10, 70);
+
+  // 繪製數字圓點
+  for (let dot of dots) {
+    fill(200);
+    if (dot.hit) {
+      fill(0, 255, 0); // 擊中後變綠色
+    }
+    ellipse(dot.x, dot.y, dot.radius * 2);
+    fill(0);
+    textSize(20);
+    textAlign(CENTER, CENTER);
+    text(dot.number, dot.x, dot.y);
+  }
+
+  // 檢查手部是否點擊到數字圓點
   if (hands.length > 0) {
     for (let hand of hands) {
-      if (hand.confidence > 0.1) {
-        // 繪製手部關鍵點
-        for (let i = 0; i < hand.keypoints.length; i++) {
-          let keypoint = hand.keypoints[i];
-          fill(255, 204, 0);
-          noStroke();
-          ellipse(keypoint.x, keypoint.y, 10, 10);
-        }
+      if (hand.confidence > 0.8) { // 提高信心度判斷
+        // 取得食指指尖的關鍵點 (index 為 8)
+        const indexFinger = hand.keypoints[8];
+        if (indexFinger) {
+          const fingerX = indexFinger.x;
+          const fingerY = indexFinger.y;
 
-        // 檢查手勢是否匹配
-        if (checkGesture(hand, currentTarget.gesture)) {
-          score++;
-          scoreDisplay.html(score);
-          nextTarget();
-          // 可以添加成功的回饋動畫或音效
+          // 檢查是否點擊到未被擊中的目標數字圓點
+          for (let i = dots.length - 1; i >= 0; i--) {
+            const dot = dots[i];
+            if (!dot.hit && dist(fingerX, fingerY, dot.x, dot.y) < dot.radius) {
+              if (dot.number === targetNumber) {
+                score++;
+                dot.hit = true;
+                pickTargetNumber();
+                // 可以增加產生新圓點的邏輯，例如擊中後產生一個新的
+                if (dots.filter(d => !d.hit).length === 0) {
+                  generateDots(3); // 全部擊中後再產生新的
+                }
+              } else {
+                // 點擊錯誤可以有反饋，例如短暫閃爍或扣分 (可選)
+                console.log("點擊錯誤！");
+              }
+              break; // 只處理一個點擊
+            }
+          }
         }
       }
     }
   }
-}
 
-function checkGesture(hand, targetGesture) {
-  if (targetGesture === "thumbUp") {
-    // 檢查拇指是否豎起 (簡化判斷)
-    const thumbTip = hand.keypoints[4];
-    const indexTip = hand.keypoints[8];
-    if (thumbTip && indexTip && thumbTip.y < indexTip.y && thumbTip.y < hand.keypoints[5].y) {
-      // 確保拇指指尖高於拇指根部和食指指尖
-      return true;
-    }
-  } else if (targetGesture === "twoFingers") {
-    // 檢查是否伸出食指和中指 (需要更精確的判斷)
-    const indexFingerTip = hand.keypoints[8];
-    const middleFingerTip = hand.keypoints[12];
-    const ringFingerTip = hand.keypoints[16];
-    const pinkyFingerTip = hand.keypoints[20];
-
-    const indexFingerBase = hand.keypoints[5];
-    const middleFingerBase = hand.keypoints[9];
-    const ringFingerBase = hand.keypoints[13];
-    const pinkyFingerBase = hand.keypoints[17];
-
-    if (indexFingerTip && middleFingerTip && indexFingerBase && middleFingerBase &&
-        indexFingerTip.y < indexFingerBase.y &&
-        middleFingerTip.y < middleFingerBase.y &&
-        (ringFingerTip.y > ringFingerBase.y || !ringFingerTip) && // 確保無名指彎曲或不存在
-        (pinkyFingerTip.y > pinkyFingerBase.y || !pinkyFingerTip)) { // 確保小指彎曲或不存在
-      return true;
+  // 更新倒計時
+  if (gameStarted) {
+    timer -= deltaTime / 1000;
+    if (timer <= 0) {
+      gameOver();
     }
   }
-  return false;
+}
+
+function mousePressed() {
+  if (!gameStarted) {
+    startGame(); // 按下滑鼠也能開始遊戲，方便測試
+  }
+  // console.log(hands); // 方便除錯時查看手部追蹤數據
 }
