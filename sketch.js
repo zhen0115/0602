@@ -14,7 +14,6 @@ let numberX, numberY;
 let numberSize = 64;
 let canAnswer = true;
 let answerDelay = 500;
-// let handPosition = null; // 不再直接使用手部中心估計
 let touchThreshold = 60;
 
 let numberPairs = [
@@ -22,7 +21,11 @@ let numberPairs = [
     { number: 2, word: "two" },
     { number: 3, word: "three" },
     { number: 4, word: "four" },
-    { number: 5, word: "five" }
+    { number: 5, word: "five" },
+    { number: 6, word: "six" },
+    { number: 7, word: "seven" },
+    { number: 8, word: "eight" },
+    { number: 9, word: "nine" }
     // 可以添加更多數字和單字
 ];
 
@@ -56,7 +59,6 @@ function startGame() {
     gameStarted = true;
     instructionDiv.html('將你的食指移動到對應的英文單字上');
     canAnswer = true;
-    // handPosition = null; // 不再需要
 }
 
 function generateQuestion() {
@@ -121,7 +123,22 @@ function drawQuestion() {
 function drawOptions() {
     textSize(24);
     for (let i = 0; i < options.length; i++) {
-        fill(0, 100, 200);
+        let is نزدیک = false;
+        if (predictions.length > 0 && canAnswer) {
+            predictions.forEach(prediction => {
+                const hand = prediction.handLandmarks;
+                if (hand && hand[8]) { // 檢查是否有偵測到手和食指
+                    const fingerX = map(hand[8][0], 0, video.width, 0, width);
+                    const fingerY = map(hand[8][1], 0, video.height, 0, height);
+                    let distance = dist(fingerX, fingerY, optionPositions[i].x, optionPositions[i].y);
+                    if (distance < touchThreshold) {
+                        is نزدیک = true;
+                    }
+                }
+            });
+        }
+
+        fill(0, 100, is نزدیک ? 250 : 200); // 靠近時稍微改變顏色
         ellipse(optionPositions[i].x, optionPositions[i].y, optionRadius * 2);
         fill(255);
         textAlign(CENTER, CENTER);
@@ -145,10 +162,10 @@ function drawHandPoints() {
                     const fingerY = y;
                     for (let j = 0; j < options.length; j++) {
                         let distance = dist(fingerX, fingerY, optionPositions[j].x, optionPositions[j].y);
-                        if (distance < touchThreshold) {
+                        if (distance < touchThreshold && mouseIsPressed) { // 用 mouseIsPressed 模擬觸碰
                             console.log(`食指觸碰到選項 ${j} ('${options[j]}')`);
                             handleAnswer(options[j]);
-                            break; // 避免同時觸發多個選項
+                            break;
                         }
                     }
                 }
