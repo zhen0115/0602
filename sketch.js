@@ -150,23 +150,39 @@ function drawHandPoints() {
     if (predictions.length > 0) {
         predictions.forEach(prediction => {
             const hand = prediction.handLandmarks;
-            for (let i = 0; i < hand.length; i++) {
-                const x = map(hand[i][0], 0, video.width, 0, width);
-                const y = map(hand[i][1], 0, video.height, 0, height);
+            if (hand && hand[8]) {
+                const fingerX = map(hand[8][0], 0, video.width, 0, width);
+                const fingerY = map(hand[8][1], 0, video.height, 0, height);
                 fill(255, 0, 0);
-                ellipse(x, y, 10); // 繪製手部關鍵點
+                ellipse(fingerX, fingerY, 10);
 
-                // 檢查食指尖端 (index 8) 是否觸碰到選項
-                if (i === 8 && canAnswer) {
-                    const fingerX = x;
-                    const fingerY = y;
+                if (canAnswer) {
+                    let currentTouchingIndex = -1;
                     for (let j = 0; j < options.length; j++) {
                         let distance = dist(fingerX, fingerY, optionPositions[j].x, optionPositions[j].y);
-                        if (distance < touchThreshold && mouseIsPressed) { // 用 mouseIsPressed 模擬觸碰
-                            console.log(`食指觸碰到選項 ${j} ('${options[j]}')`);
-                            handleAnswer(options[j]);
+                        if (distance < touchThreshold) {
+                            currentTouchingIndex = j;
                             break;
                         }
+                    }
+
+                    if (currentTouchingIndex !== -1) {
+                        if (currentTouchingIndex === touchingOptionIndex) {
+                            if (touchStartTime === 0) {
+                                touchStartTime = millis();
+                            } else if (millis() - touchStartTime > touchDurationThreshold) {
+                                console.log(`食指穩定觸碰到選項 ${currentTouchingIndex} ('${options[currentTouchingIndex]}')`);
+                                handleAnswer(options[currentTouchingIndex]);
+                                touchingOptionIndex = -1;
+                                touchStartTime = 0;
+                            }
+                        } else {
+                            touchingOptionIndex = currentTouchingIndex;
+                            touchStartTime = 0;
+                        }
+                    } else {
+                        touchingOptionIndex = -1;
+                        touchStartTime = 0;
                     }
                 }
             }
@@ -221,3 +237,7 @@ function shuffle(array) {
         [array[i], array[j]] = [array[j], array[i]];
     }
 }
+
+let touchingOptionIndex = -1;
+let touchStartTime = 0;
+const touchDurationThreshold = 500; // 觸碰持續 500 毫秒
