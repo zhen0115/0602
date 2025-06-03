@@ -1,25 +1,38 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>手控數學配對遊戲</title>
+  <title>數字英文配對遊戲</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.2/lib/p5.js"></script>
   <style>
-    body { margin: 0; }
-    canvas { display: block; }
+    body {
+      margin: 0;
+      overflow: hidden; /* 防止滾動條 */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #ffe6a7; /* 和 P5.js 畫布背景一致 */
+    }
     #instruction {
       position: absolute;
-      top: 10px;
-      left: 10px;
-      background-color: rgba(255, 255, 255, 0.8);
-      padding: 10px;
-      border-radius: 5px;
-      font-size: 16px;
+      top: 50px; /* 調整位置 */
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: sans-serif;
+      font-size: 28px;
+      color: #333;
+      padding: 10px 20px;
+      background-color: rgba(255, 255, 255, 0.7);
+      border-radius: 10px;
+      z-index: 10; /* 確保在畫布上方 */
+    }
+    canvas {
+      display: block; /* 移除畫布下方的空白 */
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.js"></script>
-  <script src="sketch.js"></script>
 </head>
 <body>
-</body>
+  <script src="你的檔案名稱.js"></script> </body>
 </html>
